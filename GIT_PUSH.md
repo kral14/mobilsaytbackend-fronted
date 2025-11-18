@@ -14,8 +14,8 @@ git add .
 # Commit edin
 git commit -m "Initial commit for Render deployment"
 
-# GitHub repository-sinə bağlayın
-git remote add origin https://github.com/kral14/mobilsayt.git
+# GitHub repository-sinə bağlayın (yeni repo)
+git remote add origin https://github.com/kral14/mobilsaytbackend-fronted.git
 
 # Main branch-ə push edin
 git branch -M main
