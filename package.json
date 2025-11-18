@@ -1,0 +1,14 @@
+{
+  "name": "mobilsayt",
+  "version": "1.0.0",
+  "description": "Alış-satış platforması - Web, Android və iOS",
+  "scripts": {
+    "dev:web": "cd web && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "install:all": "npm install && cd web && npm install && cd ../backend && npm install"
+  },
+  "keywords": ["ecommerce", "marketplace", "react", "android", "kotlin"],
+  "author": "",
+  "license": "MIT"
+}
+

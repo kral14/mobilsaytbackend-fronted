@@ -1,0 +1,108 @@
+services:
+  # Backend API Service
+  - type: web
+    name: mobilsayt-backend
+    env: node
+    plan: free
+    buildCommand: cd backend && npm install --include=dev && npx prisma generate && npm run build
+    startCommand: cd backend && npm run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: DATABASE_URL
+        sync: false  # Neon database URL-ini buraya təyin edin
+      - key: JWT_SECRET
+        sync: false  # Bu environment variable-ı Render dashboard-dan təyin etməlisiniz
+    healthCheckPath: /api/health
+
+  # Frontend - Root entry point (Device detection ilə yönləndirmə)
+  - type: web
+    name: mobilsayt-frontend
+    env: static
+    buildCommand: |
+      # Hər iki versiyanı build et
+      echo "Building mobile version..."
+      cd mobil && npm install && npm run build
+      echo "Building web version..."
+      cd ../web && npm install && npm run build
+      # Root index.html yarat
+      cd ..
+      mkdir -p public
+      cat > public/index.html << 'EOF'
+<!DOCTYPE html>
+<html lang="az">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MobilSayt - Alış-Satış Platforması</title>
+    <script>
+      // Device detection - mobil və ya PC
+      (function() {
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+                        (window.innerWidth <= 768 && window.innerHeight <= 1024);
+        
+        // URL-dən versiya parametrini yoxla (manual seçim üçün)
+        const urlParams = new URLSearchParams(window.location.search);
+        const version = urlParams.get('v');
+        
+        // Path-dən versiyanı müəyyən et
+        const path = window.location.pathname;
+        const isMobilePath = path.startsWith('/mobil');
+        const isWebPath = path.startsWith('/web');
+        
+        if (isMobilePath) {
+          // Artıq mobil path-dədirsə, mobil versiyasına yönləndir
+          window.location.href = '/mobil' + path.replace('/mobil', '') + window.location.search + window.location.hash;
+        } else if (isWebPath) {
+          // Artıq web path-dədirsə, web versiyasına yönləndir
+          window.location.href = '/web' + path.replace('/web', '') + window.location.search + window.location.hash;
+        } else if (version === 'mobile' || version === 'mobil') {
+          // Manual olaraq mobil versiyası seçilib
+          window.location.href = '/mobil' + path + window.location.search.replace(/[?&]v=(mobile|mobil)/, '') + window.location.hash;
+        } else if (version === 'pc' || version === 'desktop') {
+          // Manual olaraq PC versiyası seçilib
+          window.location.href = '/web' + path + window.location.search.replace(/[?&]v=(pc|desktop)/, '') + window.location.hash;
+        } else if (isMobile) {
+          // Mobil cihaz - mobil versiyasına yönləndir
+          window.location.href = '/mobil' + path + window.location.search + window.location.hash;
+        } else {
+          // PC - web versiyasına yönləndir
+          window.location.href = '/web' + path + window.location.search + window.location.hash;
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif;">
+      <div style="text-align: center;">
+        <h1>Yönləndirilir...</h1>
+        <p>Zəhmət olmasa gözləyin</p>
+      </div>
+    </div>
+  </body>
+</html>
+EOF
+      # Mobil və web versiyalarını public qovluğuna kopyala
+      cp -r mobil/dist public/mobil
+      cp -r web/dist public/web
+    staticPublishPath: public
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: mobilsayt-backend
+          property: url
+        suffix: /api
+    routes:
+      - type: rewrite
+        source: /mobil/*
+        destination: /mobil/index.html
+      - type: rewrite
+        source: /web/*
+        destination: /web/index.html
+      - type: rewrite
+        source: /*
+        destination: /index.html

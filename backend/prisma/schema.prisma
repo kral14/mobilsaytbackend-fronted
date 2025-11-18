@@ -1,0 +1,169 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Schema updated to include production_date, expiry_date, payment_date, and is_active fields for both sale and purchase invoices - trigger db push - v4 - restart backend
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model customers {
+  id            Int             @id @default(autoincrement())
+  code          String?         @db.VarChar(50)
+  name          String          @db.VarChar(255)
+  phone         String?         @db.VarChar(50)
+  email         String?         @db.VarChar(255)
+  address       String?
+  created_at    DateTime?       @default(now()) @db.Timestamp(6)
+  updated_at    DateTime?       @default(now()) @db.Timestamp(6)
+  balance       Decimal?        @default(0) @db.Decimal(10, 2)
+  folder_id     Int?
+  is_active     Boolean?        @default(true)
+  sale_invoices sale_invoices[]
+  folder        customer_folders? @relation(fields: [folder_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+}
+
+model password_reset_tokens {
+  id         Int       @id @default(autoincrement())
+  user_id    Int?
+  token      String    @unique @db.VarChar(255)
+  expires_at DateTime  @db.Timestamp(6)
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+  users      users?    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model categories {
+  id          Int        @id @default(autoincrement())
+  name        String     @db.VarChar(255)
+  parent_id   Int?
+  created_at  DateTime?  @default(now()) @db.Timestamp(6)
+  updated_at  DateTime?  @default(now()) @db.Timestamp(6)
+  parent      categories? @relation("CategoryTree", fields: [parent_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  children    categories[] @relation("CategoryTree")
+  products    products[]
+}
+
+model products {
+  id                     Int                      @id @default(autoincrement())
+  name                   String                   @db.VarChar(255)
+  barcode                String?                  @db.VarChar(100)
+  description            String?
+  unit                   String?                  @default("ədəd") @db.VarChar(50)
+  purchase_price         Decimal?                 @default(0) @db.Decimal(10, 2)
+  sale_price             Decimal?                 @default(0) @db.Decimal(10, 2)
+  created_at             DateTime?                @default(now()) @db.Timestamp(6)
+  updated_at             DateTime?                @default(now()) @db.Timestamp(6)
+  code                   String?                  @db.VarChar(20)
+  purchase_invoice_items purchase_invoice_items[]
+  sale_invoice_items     sale_invoice_items[]
+  warehouse              warehouse[]
+  article                String?                  @db.VarChar(100)
+  category_id            Int?
+  type                   String?                  @db.VarChar(100)
+  brand                  String?                  @db.VarChar(100)
+  model                  String?                  @db.VarChar(100)
+  color                  String?                  @db.VarChar(50)
+  size                   String?                  @db.VarChar(50)
+  weight                 Decimal?                 @db.Decimal(10, 2)
+  country                String?                  @db.VarChar(100)
+  manufacturer           String?                  @db.VarChar(255)
+  warranty_period        Int?
+  production_date        DateTime?                @db.Timestamp(6)
+  expiry_date            DateTime?                @db.Timestamp(6)
+  min_stock              Decimal?                 @default(0) @db.Decimal(10, 2)
+  max_stock              Decimal?                 @db.Decimal(10, 2)
+  tax_rate               Decimal?                 @default(0) @db.Decimal(5, 2)
+  is_active              Boolean?                 @default(true)
+  category               categories?              @relation(fields: [category_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+}
+
+model purchase_invoice_items {
+  id                Int                @id @default(autoincrement())
+  invoice_id        Int?
+  product_id        Int?
+  quantity          Decimal            @db.Decimal(10, 2)
+  unit_price        Decimal            @db.Decimal(10, 2)
+  total_price       Decimal            @db.Decimal(10, 2)
+  purchase_invoices purchase_invoices? @relation(fields: [invoice_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  products          products?          @relation(fields: [product_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model purchase_invoices {
+  id                     Int                      @id @default(autoincrement())
+  invoice_number         String                   @unique @db.VarChar(100)
+  supplier_id            Int?
+  total_amount           Decimal?                 @default(0) @db.Decimal(10, 2)
+  invoice_date           DateTime?                @default(now()) @db.Timestamp(6)
+  notes                  String?
+  is_active              Boolean?                 @default(true) // Active status for purchase invoices
+  created_at             DateTime?                @default(now()) @db.Timestamp(6)
+  purchase_invoice_items purchase_invoice_items[]
+  suppliers              suppliers?               @relation(fields: [supplier_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model sale_invoice_items {
+  id            Int            @id @default(autoincrement())
+  invoice_id    Int?
+  product_id    Int?
+  quantity      Decimal        @db.Decimal(10, 2)
+  unit_price    Decimal        @db.Decimal(10, 2)
+  total_price   Decimal        @db.Decimal(10, 2)
+  sale_invoices sale_invoices? @relation(fields: [invoice_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  products      products?      @relation(fields: [product_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model sale_invoices {
+  id                 Int                  @id @default(autoincrement())
+  invoice_number     String               @unique @db.VarChar(100)
+  customer_id        Int?
+  total_amount       Decimal?             @default(0) @db.Decimal(10, 2)
+  invoice_date       DateTime?            @default(now()) @db.Timestamp(6)
+  payment_date       DateTime?            @db.Timestamp(6)
+  notes              String?
+  is_active          Boolean?             @default(true) // Active status for invoices
+  created_at         DateTime?            @default(now()) @db.Timestamp(6)
+  sale_invoice_items sale_invoice_items[]
+  customers          customers?           @relation(fields: [customer_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model suppliers {
+  id                Int                 @id @default(autoincrement())
+  name              String              @db.VarChar(255)
+  phone             String?             @db.VarChar(50)
+  email             String?             @db.VarChar(255)
+  address           String?
+  created_at        DateTime?           @default(now()) @db.Timestamp(6)
+  updated_at        DateTime?           @default(now()) @db.Timestamp(6)
+  balance           Decimal?            @default(0) @db.Decimal(10, 2)
+  purchase_invoices purchase_invoices[]
+}
+
+model users {
+  id                    Int                     @id @default(autoincrement())
+  email                 String                  @unique @db.VarChar(255)
+  password              String                  @db.VarChar(255)
+  created_at            DateTime?               @default(now()) @db.Timestamp(6)
+  updated_at            DateTime?               @default(now()) @db.Timestamp(6)
+  password_reset_tokens password_reset_tokens[]
+}
+
+model warehouse {
+  id         Int       @id @default(autoincrement())
+  product_id Int?
+  quantity   Decimal?  @default(0) @db.Decimal(10, 2)
+  updated_at DateTime? @default(now()) @db.Timestamp(6)
+  products   products? @relation(fields: [product_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model customer_folders {
+  id          Int                @id @default(autoincrement())
+  name        String             @db.VarChar(255)
+  parent_id   Int?
+  created_at  DateTime?          @default(now()) @db.Timestamp(6)
+  updated_at  DateTime?          @default(now()) @db.Timestamp(6)
+  parent      customer_folders?  @relation("CustomerFolderTree", fields: [parent_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  children    customer_folders[] @relation("CustomerFolderTree")
+  customers   customers[]
+}
