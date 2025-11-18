@@ -115,13 +115,14 @@ export default function Alicilar() {
   const toolbarRef = useRef<HTMLDivElement>(null)
   const searchPanelRef = useRef<HTMLDivElement>(null)
   const filterPanelRef = useRef<HTMLDivElement>(null)
+  const folderPanelRef = useRef<HTMLDivElement>(null)
   const tableHeaderRef = useRef<HTMLTableElement>(null)
   const tableHeaderScrollRef = useRef<HTMLDivElement>(null)
   const tableBodyScrollRef = useRef<HTMLDivElement>(null)
   const [toolbarHeight, setToolbarHeight] = useState(60)
   const [searchPanelHeight, setSearchPanelHeight] = useState(0)
   const [filterPanelHeight, setFilterPanelHeight] = useState(0)
-  const [tableHeaderHeight, setTableHeaderHeight] = useState(50)
+  const [folderPanelHeight, setFolderPanelHeight] = useState(0)
 
   useEffect(() => {
     loadCustomers()
@@ -144,18 +145,17 @@ export default function Alicilar() {
       } else {
         setFilterPanelHeight(0)
       }
-      // Cədvəl başlığının hündürlüyünü hesabla
-      if (tableHeaderRef.current) {
-        const thead = tableHeaderRef.current.querySelector('thead')
-        if (thead) {
-          setTableHeaderHeight(thead.offsetHeight)
-        }
+      // Papka panelinin hündürlüyünü hesabla
+      if (folderPanelRef.current && folderOpen) {
+        setFolderPanelHeight(folderPanelRef.current.offsetHeight)
+      } else {
+        setFolderPanelHeight(0)
       }
     }
     setTimeout(updateHeights, 0)
     window.addEventListener('resize', updateHeights)
     return () => window.removeEventListener('resize', updateHeights)
-  }, [searchOpen, filterOpen])
+  }, [searchOpen, filterOpen, folderOpen])
 
   // Cədvəl başlığı və gövdəsi scroll sinxronizasiyası
   useEffect(() => {
@@ -1651,7 +1651,12 @@ export default function Alicilar() {
 
   const toolbarTop = NAVBAR_HEIGHT + NAVBAR_TOOLBAR_GAP
   const contentPaddingTop =
-    toolbarTop + toolbarHeight + searchPanelHeight + filterPanelHeight + TOOLBAR_TABLE_GAP
+    toolbarTop +
+    toolbarHeight +
+    searchPanelHeight +
+    filterPanelHeight +
+    folderPanelHeight +
+    TOOLBAR_TABLE_GAP
 
   return (
     <Layout>
@@ -2009,6 +2014,54 @@ export default function Alicilar() {
                 Balans {'<'} 0
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Papka üst paneli - toolbarla cədvəl arasında, axtarış kimi */}
+        {folderOpen && (
+          <div
+            ref={folderPanelRef}
+            style={{
+              background: '#f5f5f5',
+              padding: '0.4rem 0.75rem',
+              borderBottom: '1px solid #e0e0e0',
+              flexShrink: 0,
+              position: 'fixed',
+              top: `${toolbarTop + toolbarHeight + searchPanelHeight + filterPanelHeight}px`,
+              left: 0,
+              right: 0,
+              zIndex: 998,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '0.5rem',
+            }}
+          >
+            <div style={{ fontSize: '0.85rem', color: '#333', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+              {folderPath.map((item, index) => (
+                <span key={item.id || 'root'}>
+                  {index > 0 && <span style={{ color: '#999', margin: '0 0.25rem' }}>›</span>}
+                  <span
+                    style={{
+                      cursor: 'pointer',
+                      color: index === folderPath.length - 1 ? '#1976d2' : '#666',
+                      fontWeight: index === folderPath.length - 1 ? 'bold' : 'normal',
+                    }}
+                    onClick={() => {
+                      setSelectedFolder(item.id)
+                      setSelectedIds(new Set())
+                    }}
+                  >
+                    {item.name}
+                  </span>
+                </span>
+              ))}
+            </div>
+            {selectedFolder !== null && (
+              <div style={{ fontSize: '0.8rem', color: '#666', flexShrink: 0 }}>
+                {filteredCustomers.length} müştəri
+              </div>
+            )}
           </div>
         )}
 
