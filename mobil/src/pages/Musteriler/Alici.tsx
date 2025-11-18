@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import Layout, { useNavbarGestureSettings } from '../../components/Layout'
+import Layout from '../../components/Layout'
 import Toast from '../../components/Toast'
 import { customersAPI, customerFoldersAPI } from '../../services/api'
 import type { Customer } from '@shared/types'
@@ -17,6 +17,7 @@ export default function Alicilar() {
   const [loading, setLoading] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [searchOpen, setSearchOpen] = useState(false)
+  const [searchText, setSearchText] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [folderOpen, setFolderOpen] = useState(false)
@@ -41,6 +42,15 @@ export default function Alicilar() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
   const [settingsModalOpen, setSettingsModalOpen] = useState(false) // Ayarlar modalı
   const [settingsTab, setSettingsTab] = useState<'columns' | 'functions'>('columns') // Ayarlar tab
+  // Navbar görünürlüyü üçün local state (Layout ilə localStorage və window vasitəsilə sinxronlaşdırılır)
+  const [topNavbarVisible, setTopNavbarVisible] = useState(() => {
+    const saved = localStorage.getItem('topNavbarVisible')
+    return saved !== null ? saved === 'true' : true
+  })
+  const [bottomNavbarVisible, setBottomNavbarVisible] = useState(() => {
+    const saved = localStorage.getItem('bottomNavbarVisible')
+    return saved !== null ? saved === 'true' : true
+  })
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>(() => {
     const saved = localStorage.getItem('customerTableColumnVisibility')
     return saved ? JSON.parse(saved) : {
@@ -63,16 +73,8 @@ export default function Alicilar() {
     return saved === 'true' ? true : false
   }) // Papka ağacının görünürlüyü
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; folderId: number | null } | null>(null) // Kontekst menyu
-  const [debugMode] = useState(false) // Debug mode - border və ölçüləri göstərmək üçün
+  const [debugMode] = useState(true) // Debug mode - border və ölçüləri göstərmək üçün (rəngli çərçivələr aktiv)
   const [isMobile, setIsMobile] = useState(false) // Mobil cihaz yoxlaması
-  
-  // Navbar gesture ayarları
-  const {
-    topNavbarGestureEnabled,
-    setTopNavbarGestureEnabled,
-    bottomNavbarGestureEnabled,
-    setBottomNavbarGestureEnabled,
-  } = useNavbarGestureSettings()
   
   // Ekran ölçüsünü yoxla
   useEffect(() => {
@@ -110,11 +112,78 @@ export default function Alicilar() {
   const [_touchStartColumn, setTouchStartColumn] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const thRefs = useRef<Map<string, HTMLTableCellElement>>(new Map())
+  const toolbarRef = useRef<HTMLDivElement>(null)
+  const searchPanelRef = useRef<HTMLDivElement>(null)
+  const filterPanelRef = useRef<HTMLDivElement>(null)
+  const tableHeaderRef = useRef<HTMLTableElement>(null)
+  const tableHeaderScrollRef = useRef<HTMLDivElement>(null)
+  const tableBodyScrollRef = useRef<HTMLDivElement>(null)
+  const [toolbarHeight, setToolbarHeight] = useState(60)
+  const [searchPanelHeight, setSearchPanelHeight] = useState(0)
+  const [filterPanelHeight, setFilterPanelHeight] = useState(0)
+  const [tableHeaderHeight, setTableHeaderHeight] = useState(50)
 
   useEffect(() => {
     loadCustomers()
     loadFolders()
   }, [])
+
+  // Toolbar və panellərin hündürlüyünü hesabla
+  useEffect(() => {
+    const updateHeights = () => {
+      if (toolbarRef.current) {
+        setToolbarHeight(toolbarRef.current.offsetHeight)
+      }
+      if (searchPanelRef.current && searchOpen) {
+        setSearchPanelHeight(searchPanelRef.current.offsetHeight)
+      } else {
+        setSearchPanelHeight(0)
+      }
+      if (filterPanelRef.current && filterOpen) {
+        setFilterPanelHeight(filterPanelRef.current.offsetHeight)
+      } else {
+        setFilterPanelHeight(0)
+      }
+      // Cədvəl başlığının hündürlüyünü hesabla
+      if (tableHeaderRef.current) {
+        const thead = tableHeaderRef.current.querySelector('thead')
+        if (thead) {
+          setTableHeaderHeight(thead.offsetHeight)
+        }
+      }
+    }
+    setTimeout(updateHeights, 0)
+    window.addEventListener('resize', updateHeights)
+    return () => window.removeEventListener('resize', updateHeights)
+  }, [searchOpen, filterOpen])
+
+  // Cədvəl başlığı və gövdəsi scroll sinxronizasiyası
+  useEffect(() => {
+    const headerScroll = tableHeaderScrollRef.current
+    const bodyScroll = tableBodyScrollRef.current
+
+    if (!headerScroll || !bodyScroll) return
+
+    const handleHeaderScroll = () => {
+      if (bodyScroll.scrollLeft !== headerScroll.scrollLeft) {
+        bodyScroll.scrollLeft = headerScroll.scrollLeft
+      }
+    }
+
+    const handleBodyScroll = () => {
+      if (headerScroll.scrollLeft !== bodyScroll.scrollLeft) {
+        headerScroll.scrollLeft = bodyScroll.scrollLeft
+      }
+    }
+
+    headerScroll.addEventListener('scroll', handleHeaderScroll)
+    bodyScroll.addEventListener('scroll', handleBodyScroll)
+
+    return () => {
+      headerScroll.removeEventListener('scroll', handleHeaderScroll)
+      bodyScroll.removeEventListener('scroll', handleBodyScroll)
+    }
+  }, [customers.length])
 
   // Sütun konfiqurasiyasını localStorage-a yaz
   useEffect(() => {
@@ -252,19 +321,59 @@ export default function Alicilar() {
 
   // Drag & Drop funksiyaları (Mouse)
   const handleDragStart = (e: React.DragEvent, columnKey: string) => {
-    if (columnKey === 'checkbox') return // Checkbox sütununu sürüşdürmə
+    if (columnKey === 'checkbox') {
+      e.preventDefault()
+      return // Checkbox sütununu sürüşdürmə
+    }
     setDraggedColumn(columnKey)
+    setIsDragging(true)
     e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', columnKey)
+    // Drag görünüşünü yaxşılaşdır
+    if (e.dataTransfer.setDragImage) {
+      const dragImage = document.createElement('div')
+      dragImage.style.position = 'absolute'
+      dragImage.style.top = '-1000px'
+      dragImage.textContent = columnConfig[columnKey]?.label || columnKey
+      document.body.appendChild(dragImage)
+      e.dataTransfer.setDragImage(dragImage, 0, 0)
+      setTimeout(() => document.body.removeChild(dragImage), 0)
+    }
   }
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleDragEnter = (e: React.DragEvent, targetColumn: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (targetColumn !== 'checkbox' && draggedColumn && draggedColumn !== targetColumn) {
+      const targetElement = e.currentTarget as HTMLElement
+      targetElement.style.opacity = '0.5'
+    }
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const targetElement = e.currentTarget as HTMLElement
+    targetElement.style.opacity = '1'
   }
 
   const handleDrop = (e: React.DragEvent, targetColumn: string) => {
     e.preventDefault()
-    if (!draggedColumn || draggedColumn === targetColumn || targetColumn === 'checkbox') return
+    e.stopPropagation()
+    const targetElement = e.currentTarget as HTMLElement
+    targetElement.style.opacity = '1'
+    
+    if (!draggedColumn || draggedColumn === targetColumn || targetColumn === 'checkbox') {
+      setIsDragging(false)
+      setDraggedColumn(null)
+      return
+    }
 
     const newOrder = [...columnOrder]
     const draggedIndex = newOrder.indexOf(draggedColumn)
@@ -275,6 +384,16 @@ export default function Alicilar() {
 
     setColumnOrder(newOrder)
     setDraggedColumn(null)
+    setIsDragging(false)
+  }
+
+  const handleDragEnd = () => {
+    setIsDragging(false)
+    setDraggedColumn(null)
+    // Bütün th elementlərinin opacity-sini reset et
+    document.querySelectorAll('th[data-column-key]').forEach((th) => {
+      (th as HTMLElement).style.opacity = '1'
+    })
   }
 
 
@@ -305,13 +424,9 @@ export default function Alicilar() {
 
   // Touch event-ləri üçün resize
   const handleResizeTouchStart = (e: React.TouchEvent, columnKey: string) => {
-    try {
-      if (e.cancelable) {
-        e.preventDefault()
-      }
-    } catch (err) {
-      // Ignore passive listener error
-    }
+    // React-in touch event listener-ləri bəzi brauzerlərdə passive ola bilər,
+    // ona görə burada preventDefault çağırmırıq (xəta verməsin deyə), yalnız
+    // document səviyyəsində əlavə etdiyimiz non-passive listener-də istifadə edirik.
     e.stopPropagation()
     setResizingColumn(columnKey)
     
@@ -425,12 +540,25 @@ export default function Alicilar() {
     }
   }
 
-  const handleSelect = (id: number) => {
+  const handleSelect = (id: number, event?: React.MouseEvent) => {
     const newSelected = new Set(selectedIds)
-    if (newSelected.has(id)) {
-      newSelected.delete(id)
+    const isCtrlPressed = event?.ctrlKey || event?.metaKey // Mac üçün Cmd düyməsi
+    
+    if (isCtrlPressed) {
+      // Ctrl basılıbsa, mövcud seçimləri saxlayıb yenisini əlavə et və ya çıxar
+      if (newSelected.has(id)) {
+        newSelected.delete(id)
+      } else {
+        newSelected.add(id)
+      }
     } else {
-      newSelected.add(id)
+      // Ctrl basılmamışdırsa, yalnız bu sətiri seç (və ya seçimdən çıxar)
+      if (newSelected.has(id)) {
+        newSelected.delete(id)
+      } else {
+        newSelected.clear()
+        newSelected.add(id)
+      }
     }
     setSelectedIds(newSelected)
   }
@@ -533,10 +661,15 @@ export default function Alicilar() {
   }
 
   const handleSearch = () => {
-    setSearchOpen(!searchOpen)
+    const newSearchOpen = !searchOpen
+    setSearchOpen(newSearchOpen)
     setFilterOpen(false)
     setSettingsOpen(false)
     setFolderOpen(false)
+    // Axtarış paneli bağlandıqda axtarış mətnini təmizlə
+    if (!newSearchOpen) {
+      setSearchText('')
+    }
   }
 
   const handleFilter = () => {
@@ -1126,6 +1259,10 @@ export default function Alicilar() {
                       fontWeight: 'bold',
                       fontSize: '0.8rem',
                       color: '#333',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none',
                     }}
                   >
                     <input
@@ -1154,6 +1291,10 @@ export default function Alicilar() {
                       fontWeight: 'bold',
                       fontSize: '0.8rem',
                       color: '#333',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none',
                     }}
                   >
                     Kod
@@ -1167,6 +1308,10 @@ export default function Alicilar() {
                       fontWeight: 'bold',
                       fontSize: '0.8rem',
                       color: '#333',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none',
                     }}
                   >
                     Ad
@@ -1180,6 +1325,10 @@ export default function Alicilar() {
                       fontWeight: 'bold',
                       fontSize: '0.8rem',
                       color: '#333',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none',
                     }}
                   >
                     Telefon
@@ -1193,6 +1342,10 @@ export default function Alicilar() {
                       fontWeight: 'bold',
                       fontSize: '0.8rem',
                       color: '#333',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none',
                     }}
                   >
                     Papka
@@ -1205,6 +1358,10 @@ export default function Alicilar() {
                       fontWeight: 'bold',
                       fontSize: '0.8rem',
                       color: '#333',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none',
                     }}
                   >
                     Balans
@@ -1429,7 +1586,19 @@ export default function Alicilar() {
     ? customers // Bütün müştərilər
     : customers.filter(customer => customer.folder_id === selectedFolder)
   
-  const filteredCustomers = getSortedCustomers(filteredCustomersRaw)
+  // Axtarış məntiqini tətbiq et
+  const filteredBySearch = searchText.trim() === ''
+    ? filteredCustomersRaw
+    : filteredCustomersRaw.filter(customer => {
+        const searchLower = searchText.toLowerCase().trim()
+        return (
+          customer.name?.toLowerCase().includes(searchLower) ||
+          customer.code?.toLowerCase().includes(searchLower) ||
+          customer.phone?.toLowerCase().includes(searchLower)
+        )
+      })
+  
+  const filteredCustomers = getSortedCustomers(filteredBySearch)
 
   // Seçilmiş papkadakı müştərilərin sayını hesabla
   const getCustomerCountForFolder = (folderId: number | null) => {
@@ -1475,24 +1644,44 @@ export default function Alicilar() {
 
   const folderPath = getFolderPath(selectedFolder)
 
+  // Layout sabitləri - navbar, toolbar və cədvəl arasındakı boşluqlar
+  const NAVBAR_HEIGHT = 56
+  const NAVBAR_TOOLBAR_GAP = 8   // Navbar ilə toolbar arasındakı boşluq bir az artsın
+  const TOOLBAR_TABLE_GAP = 0    // Toolbar ilə cədvəl başlığı arasında əlavə boşluq olmasın
+
+  const toolbarTop = NAVBAR_HEIGHT + NAVBAR_TOOLBAR_GAP
+  const contentPaddingTop =
+    toolbarTop + toolbarHeight + searchPanelHeight + filterPanelHeight + TOOLBAR_TABLE_GAP
+
   return (
     <Layout>
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', marginTop: '-56px', paddingTop: '56px' }}>
+      <div style={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        height: '100%', 
+        marginTop: `-${NAVBAR_HEIGHT}px`, 
+        paddingTop: `${contentPaddingTop}px`,
+      }}>
         {/* Toolbar */}
         <div
+          ref={toolbarRef}
           style={{
-            background: 'white',
-            borderBottom: '1px solid #e0e0e0',
-            padding: '0.75rem 1rem',
+            background: '#f5f7fc',
+            borderBottom: '1px solid #d0d7e2',
+            padding: '0.5rem 0.75rem',
             display: 'flex',
-            gap: '0.5rem',
+            gap: '0.35rem',
             alignItems: 'center',
             flexWrap: 'nowrap',
             overflowX: 'auto',
-            position: 'sticky',
-            top: '0',
-            zIndex: 100,
+            flexShrink: 0,
+            position: 'fixed',
+            top: `${toolbarTop}px`,
+            left: 0,
+            right: 0,
+            zIndex: 999,
             scrollbarWidth: 'thin',
+            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.06)',
           }}
         >
           <button
@@ -1733,18 +1922,27 @@ export default function Alicilar() {
         {/* Axtarış paneli */}
         {searchOpen && (
           <div
+            ref={searchPanelRef}
             style={{
               background: '#f5f5f5',
-              padding: '0.75rem 1rem',
+              padding: '0.35rem 0.75rem',
               borderBottom: '1px solid #e0e0e0',
+              flexShrink: 0,
+              position: 'fixed',
+              top: `${toolbarTop + toolbarHeight}px`,
+              left: 0,
+              right: 0,
+              zIndex: 998,
             }}
           >
             <input
               type="text"
               placeholder="Axtarış..."
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
               style={{
                 width: '100%',
-                padding: '0.75rem',
+                padding: '0.4rem 0.6rem',
                 fontSize: '1rem',
                 border: '1px solid #ddd',
                 borderRadius: '6px',
@@ -1757,10 +1955,17 @@ export default function Alicilar() {
         {/* Filtr paneli */}
         {filterOpen && (
           <div
+            ref={filterPanelRef}
             style={{
               background: '#f5f5f5',
-              padding: '0.75rem 1rem',
+              padding: '0.35rem 0.75rem',
               borderBottom: '1px solid #e0e0e0',
+              flexShrink: 0,
+              position: 'fixed',
+              top: `${toolbarTop + toolbarHeight + searchPanelHeight}px`,
+              left: 0,
+              right: 0,
+              zIndex: 998,
             }}
           >
             <div style={{ fontSize: '0.875rem', color: '#666', marginBottom: '0.5rem' }}>
@@ -1810,38 +2015,15 @@ export default function Alicilar() {
 
         {/* Cədvəl və Papka Paneli */}
         <div 
-          ref={(el) => {
-            if (el) {
-              const rect = el.getBoundingClientRect()
-              const label = el.querySelector('.debug-label-red') as HTMLElement
-              if (label) {
-                label.textContent = `RED: ${rect.width.toFixed(0)}x${rect.height.toFixed(0)}px`
-              }
-            }
-          }}
-            style={{
+          style={{
             display: 'flex', 
             flex: 1, 
             overflow: 'hidden', 
             flexDirection: folderViewMode === 'accordion' ? 'column' : 'row',
-            border: debugMode ? '3px solid red' : 'none', // DEBUG
             boxSizing: 'border-box',
             position: 'relative',
           }}
         >
-          {debugMode && (
-          <div className="debug-label-red" style={{
-            position: 'absolute',
-            top: '2px',
-            left: '2px',
-            background: 'red',
-            color: 'white',
-            padding: '2px 4px',
-            fontSize: '10px',
-            zIndex: 10000,
-            fontWeight: 'bold',
-          }}>RED: Loading...</div>
-          )}
           {/* Papka Paneli - Sidebar rejimi */}
           {folderOpen && folderViewMode === 'sidebar' && (
             <div
@@ -1870,6 +2052,7 @@ export default function Alicilar() {
                 flexBasis: folderTreeVisible ? '280px' : '0px',
                 boxSizing: 'border-box',
                 position: 'relative',
+                zIndex: 1001,
               }}
             >
               {debugMode && (
@@ -1895,6 +2078,9 @@ export default function Alicilar() {
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   minHeight: '44px',
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 1001,
                 }}
               >
                 {folderTreeVisible ? (
@@ -2100,6 +2286,8 @@ export default function Alicilar() {
                 flexDirection: 'column',
                 flex: 1,
                 overflow: 'hidden',
+                position: 'relative',
+                zIndex: 1001,
               }}
             >
               {/* Papka Paneli Header */}
@@ -2112,6 +2300,9 @@ export default function Alicilar() {
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   flexShrink: 0,
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 1001,
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
@@ -2444,6 +2635,10 @@ export default function Alicilar() {
                                   fontWeight: 'bold',
                                   fontSize: '0.8rem',
                                   color: '#333',
+                                  userSelect: 'none',
+                                  WebkitUserSelect: 'none',
+                                  MozUserSelect: 'none',
+                                  msUserSelect: 'none',
                                 }}
                               >
                                 <input
@@ -2463,11 +2658,11 @@ export default function Alicilar() {
                                   style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                                 />
                               </th>
-                              <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '2px solid #ddd', borderRight: '1px solid #e0e0e0', fontWeight: 'bold', fontSize: '0.8rem', color: '#333' }}>Kod</th>
-                              <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '2px solid #ddd', borderRight: '1px solid #e0e0e0', fontWeight: 'bold', fontSize: '0.8rem', color: '#333' }}>Ad</th>
-                              <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '2px solid #ddd', borderRight: '1px solid #e0e0e0', fontWeight: 'bold', fontSize: '0.8rem', color: '#333' }}>Telefon</th>
-                              <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '2px solid #ddd', borderRight: '1px solid #e0e0e0', fontWeight: 'bold', fontSize: '0.8rem', color: '#333' }}>Papka</th>
-                              <th style={{ padding: '0.5rem', textAlign: 'right', borderBottom: '2px solid #ddd', fontWeight: 'bold', fontSize: '0.8rem', color: '#333' }}>Balans</th>
+                              <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '2px solid #ddd', borderRight: '1px solid #e0e0e0', fontWeight: 'bold', fontSize: '0.8rem', color: '#333', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>Kod</th>
+                              <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '2px solid #ddd', borderRight: '1px solid #e0e0e0', fontWeight: 'bold', fontSize: '0.8rem', color: '#333', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>Ad</th>
+                              <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '2px solid #ddd', borderRight: '1px solid #e0e0e0', fontWeight: 'bold', fontSize: '0.8rem', color: '#333', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>Telefon</th>
+                              <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '2px solid #ddd', borderRight: '1px solid #e0e0e0', fontWeight: 'bold', fontSize: '0.8rem', color: '#333', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>Papka</th>
+                              <th style={{ padding: '0.5rem', textAlign: 'right', borderBottom: '2px solid #ddd', fontWeight: 'bold', fontSize: '0.8rem', color: '#333', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>Balans</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2550,257 +2745,39 @@ export default function Alicilar() {
           {/* Cədvəl - Sidebar rejimində və ya papka bağlı olduqda göstər */}
           {(folderViewMode === 'sidebar' || !folderOpen) && (
           <div
-            ref={(el) => {
-              if (el) {
-                const rect = el.getBoundingClientRect()
-                const label = el.querySelector('.debug-label-green') as HTMLElement
-                if (label) {
-                  label.textContent = `GREEN: ${rect.width.toFixed(0)}x${rect.height.toFixed(0)}px`
-                }
-              }
-            }}
             style={{
               flex: 1,
-              overflow: 'auto',
-              WebkitOverflowScrolling: 'touch',
+              overflow: 'hidden',
               background: 'white',
               minWidth: 0,
               maxWidth: '100%',
               width: '100%',
               margin: 0,
               padding: 0,
-              border: debugMode ? '3px solid green' : 'none', // DEBUG
               boxSizing: 'border-box',
               position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
             }}
           >
-            {debugMode && (
-            <div className="debug-label-green" style={{
-              position: 'absolute',
-              top: '2px',
-              left: '2px',
-              background: 'green',
-              color: 'white',
-              padding: '2px 4px',
-              fontSize: '10px',
-              zIndex: 10000,
-              fontWeight: 'bold',
-            }}>GREEN: Loading...</div>
-            )}
             {loading ? (
               <div style={{ padding: '2rem', textAlign: 'center' }}>Yüklənir...</div>
             ) : (
               <div 
-                ref={(el) => {
-                  if (el) {
-                    const rect = el.getBoundingClientRect()
-                    const bluePanel = el.parentElement?.previousElementSibling as HTMLElement
-                    const blueRect = bluePanel?.getBoundingClientRect()
-                    const label = el.querySelector('.debug-label-orange') as HTMLElement
-                    if (label) {
-                      const leftGap = blueRect ? (rect.left - blueRect.right).toFixed(0) : '0'
-                      label.textContent = `ORANGE: ${rect.width.toFixed(0)}x${rect.height.toFixed(0)}px | Left gap: ${leftGap}px`
-                    }
-                  }
-                }}
                 style={{ 
-                  overflow: 'visible', 
-                  minHeight: '100%', 
+                  overflow: 'auto', 
+                  flex: 1,
                   padding: 0, 
                   margin: 0,
                   width: '100%',
                   maxWidth: '100%',
-                  border: debugMode ? '3px solid orange' : 'none', // DEBUG
                   boxSizing: 'border-box',
                   position: 'relative',
                   display: 'flex',
                   flexDirection: 'column',
+                  WebkitOverflowScrolling: 'touch',
                 }}
               >
-                {debugMode && (
-                <div className="debug-label-orange" style={{
-                  position: 'absolute',
-                  top: '2px',
-                  left: '2px',
-                  background: 'orange',
-                  color: 'white',
-                  padding: '2px 4px',
-                  fontSize: '10px',
-                  zIndex: 10000,
-                  fontWeight: 'bold',
-                }}>ORANGE: Loading...</div>
-                )}
-                {/* Breadcrumb Navigation - yalnız papka açıq olduqda göstər */}
-                {folderOpen && (
-                <div style={{ 
-                  padding: folderTreeVisible ? '0.5rem 1rem' : '0.5rem 0.5rem', 
-                  background: '#f5f5f5', 
-                  borderBottom: '1px solid #e0e0e0',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  fontSize: '0.875rem',
-                  position: 'relative',
-                  flexShrink: 0,
-                  minHeight: '40px',
-                }}>
-                  {/* Breadcrumb scrollable area */}
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    flex: 1,
-                    overflowX: 'auto',
-                    overflowY: 'hidden',
-                    scrollbarWidth: 'thin',
-                    WebkitOverflowScrolling: 'touch',
-                    minWidth: 0, // Flex item üçün mühüm
-                  }}>
-                    {folderPath.map((item, index) => (
-                      <div 
-                        key={item.id || 'root'} 
-                        style={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: '0.5rem',
-                          flexShrink: 0, // Elementlərin sıxışmasını qadağan et
-                        }}
-                      >
-                        {index > 0 && (
-                          <span style={{ color: '#999', fontSize: '0.75rem', flexShrink: 0 }}>›</span>
-                        )}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          {/* Gizlədilmiş papkalar ikonu - yalnız "Bütün alıcılar" üçün və ağac gizli olduqda */}
-                          {index === 0 && !folderTreeVisible && (
-                            <button
-                              onClick={() => {
-                              setFolderTreeVisible(true)
-                              localStorage.setItem('folderTreeVisible', 'true')
-                            }}
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                fontSize: '0.875rem',
-                                cursor: 'pointer',
-                                padding: '0',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#1976d2',
-                                minWidth: '16px',
-                                minHeight: '16px',
-                                lineHeight: '1',
-                              }}
-                              title="Papkaları göstər"
-                            >
-                              ▶
-                            </button>
-                          )}
-                          <button
-                          onClick={() => {
-                            if (moveFolderMode && folderToMove !== null) {
-                              // Papka köçürmə rejimində - papkanı bu papkaya köçür
-                              handleMoveFolder(item.id)
-                            } else if (moveMode) {
-                              // Müştəri köçürmə rejimində - müştəriləri bu papkaya köçür
-                              handleMoveToFolder(item.id)
-                            } else {
-                              // Normal rejim - papkaya keç
-                              setSelectedFolder(item.id)
-                              setSelectedIds(new Set())
-                            }
-                          }}
-                            style={{
-                              background: 'transparent',
-                              border: 'none',
-                              color: index === folderPath.length - 1 ? '#1976d2' : '#666',
-                              fontWeight: index === folderPath.length - 1 ? 'bold' : 'normal',
-                              cursor: 'pointer',
-                              padding: '0.25rem 0.5rem',
-                              borderRadius: '4px',
-                              fontSize: '0.875rem',
-                              textDecoration: 'none',
-                              transition: 'background 0.2s',
-                              whiteSpace: 'nowrap', // Mətnin qırılmaması
-                              flexShrink: 0,
-                              lineHeight: '1.2',
-                            }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = '#e0e0e0'
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'transparent'
-                          }}
-                        >
-                          {item.name}
-                        </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  {/* Right side: customer count and close button */}
-                  <div style={{ 
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    flexShrink: 0,
-                    marginLeft: '0.5rem',
-                  }}>
-                    {selectedFolder !== null && (
-                      <span style={{ 
-                        color: '#666', 
-                        fontSize: '0.8rem',
-                        whiteSpace: 'nowrap',
-                      }}>
-                        {filteredCustomers.length} müştəri
-                      </span>
-                    )}
-                    {selectedFolder !== null && (
-                      <button
-                        onClick={() => {
-                          setSelectedFolder(null)
-                          setSelectedIds(new Set())
-                          if (moveMode) {
-                            setMoveMode(false)
-                          }
-                          if (moveFolderMode) {
-                            setMoveFolderMode(false)
-                            setFolderToMove(null)
-                          }
-                        }}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#666',
-                          cursor: 'pointer',
-                          padding: '0.25rem',
-                          borderRadius: '4px',
-                          fontSize: '1rem',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          minWidth: '24px',
-                          minHeight: '24px',
-                          transition: 'background 0.2s',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = '#e0e0e0'
-                          e.currentTarget.style.color = '#d32f2f'
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'transparent'
-                          e.currentTarget.style.color = '#666'
-                        }}
-                        title="Bütün siyahıya qayıt"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                </div>
-                )}
-                
                 {/* Müştərilər cədvəli və ya boş mesaj */}
                 {filteredCustomers.length === 0 ? (
                   <div style={{ 
@@ -2818,9 +2795,10 @@ export default function Alicilar() {
                 <div style={{ 
                   position: 'relative',
                   flex: 1,
-                  overflowY: 'auto',
-                  overflowX: 'auto',
+                  display: 'flex',
+                  flexDirection: 'column',
                   minHeight: 0,
+                  overflow: 'hidden',
                 }}>
                   {debugMode && (
                   <div className="debug-label-purple" style={{
@@ -2835,9 +2813,22 @@ export default function Alicilar() {
                     fontWeight: 'bold',
                   }}>PURPLE: Loading...</div>
                   )}
+                <div 
+                  ref={tableHeaderScrollRef}
+                  style={{ 
+                  flexShrink: 0,
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 998,
+                  background: 'white',
+                  overflowX: 'auto',
+                  overflowY: 'hidden',
+                  WebkitOverflowScrolling: 'touch',
+                }}>
                 <table
                     ref={(el) => {
-                      if (el) {
+                      if (el && !tableHeaderRef.current) {
+                        (tableHeaderRef as React.MutableRefObject<HTMLTableElement | null>).current = el
                         const rect = el.getBoundingClientRect()
                         const label = document.querySelector('.debug-label-purple') as HTMLElement
                         if (label) {
@@ -2846,7 +2837,8 @@ export default function Alicilar() {
                       }
                     }}
                   style={{
-                    width: '100%',
+                    width: 'max-content',
+                    minWidth: '100%',
                     borderCollapse: 'collapse',
                     fontSize: '0.875rem',
                     background: 'white',
@@ -2854,10 +2846,20 @@ export default function Alicilar() {
                       padding: 0,
                       border: debugMode ? '3px solid purple' : 'none', // DEBUG
                       boxSizing: 'border-box',
+                      display: 'table',
                   }}
                 >
-                  <thead>
-                    <tr style={{ background: '#f5f5f5', position: 'sticky', top: 0, zIndex: 10 }}>
+                  <colgroup>
+                    {columnOrder.map((columnKey) => {
+                      const config = columnConfig[columnKey]
+                      if (!config || !columnVisibility[columnKey]) return null
+                      const isCheckbox = columnKey === 'checkbox'
+                      const width = columnWidths[columnKey] || (isCheckbox ? 50 : 100)
+                      return <col key={columnKey} style={{ width: `${width}px`, minWidth: `${width}px`, maxWidth: `${width}px` }} />
+                    })}
+                  </colgroup>
+                  <thead style={{ display: 'table-header-group' }}>
+                    <tr style={{ background: '#f5f5f5' }}>
                       {columnOrder.map((columnKey) => {
                         const config = columnConfig[columnKey]
                         if (!config) return null
@@ -2884,7 +2886,10 @@ export default function Alicilar() {
                             draggable={!isCheckbox}
                             onDragStart={(e) => handleDragStart(e, columnKey)}
                             onDragOver={handleDragOver}
+                            onDragEnter={(e) => handleDragEnter(e, columnKey)}
+                            onDragLeave={handleDragLeave}
                             onDrop={(e) => handleDrop(e, columnKey)}
+                            onDragEnd={handleDragEnd}
                             onClick={() => !isCheckbox && !isDragging && handleSort(columnKey)}
                             style={{
                               padding: isCheckbox 
@@ -2903,9 +2908,17 @@ export default function Alicilar() {
                               fontSize: isCheckbox ? '0.8rem' : '0.85rem',
                               color: '#333',
                               whiteSpace: 'nowrap',
+                              overflow: isCheckbox ? 'visible' : 'hidden',
+                              textOverflow: isCheckbox ? 'clip' : 'ellipsis',
                               cursor: isCheckbox ? 'default' : 'pointer',
                               userSelect: 'none',
-                              position: 'relative',
+                              WebkitUserSelect: 'none',
+                              MozUserSelect: 'none',
+                              msUserSelect: 'none',
+                              position: isCheckbox ? 'sticky' : 'relative',
+                              left: isCheckbox ? 0 : 'auto',
+                              zIndex: isCheckbox ? 10 : 'auto',
+                              background: isCheckbox ? '#f5f5f5' : 'transparent',
                               touchAction: 'none', // Touch event-ləri üçün
                             }}
                           >
@@ -2966,13 +2979,53 @@ export default function Alicilar() {
                       })}
                     </tr>
                   </thead>
+                </table>
+                </div>
+                <div 
+                  ref={tableBodyScrollRef}
+                  style={{ 
+                  minHeight: 0,
+                  overflowX: 'auto',
+                  overflowY: 'auto',
+                  flex: 1,
+                }}>
+                <table
+                  style={{
+                    width: 'max-content',
+                    minWidth: '100%',
+                    borderCollapse: 'collapse',
+                    fontSize: '0.875rem',
+                    background: 'white',
+                    margin: 0,
+                    padding: 0,
+                    border: debugMode ? '3px solid purple' : 'none',
+                    boxSizing: 'border-box',
+                    display: 'table',
+                  }}
+                >
+                  <colgroup>
+                    {columnOrder.map((columnKey) => {
+                      const config = columnConfig[columnKey]
+                      if (!config || !columnVisibility[columnKey]) return null
+                      const isCheckbox = columnKey === 'checkbox'
+                      const width = columnWidths[columnKey] || (isCheckbox ? 50 : 100)
+                      return <col key={columnKey} style={{ width: `${width}px`, minWidth: `${width}px`, maxWidth: `${width}px` }} />
+                    })}
+                  </colgroup>
+                  <thead style={{ display: 'none' }}>
+                    <tr>
+                      {columnOrder.map((columnKey, index) => (
+                        <th key={`spacer-${columnKey}-${index}`} style={{ padding: 0, border: 'none', height: 0 }}></th>
+                      ))}
+                    </tr>
+                  </thead>
                   <tbody>
                     {filteredCustomers.map((customer) => {
                       const isSelected = selectedIds.has(customer.id)
                       return (
                         <tr
                           key={customer.id}
-                          onClick={() => handleSelect(customer.id)}
+                          onClick={(e) => handleSelect(customer.id, e)}
                           style={{
                             background: isSelected ? '#e3f2fd' : 'white',
                             cursor: 'pointer',
@@ -2982,11 +3035,21 @@ export default function Alicilar() {
                           onMouseEnter={(e) => {
                             if (!isSelected) {
                               e.currentTarget.style.background = '#f5f5f5'
+                              // Checkbox sütununun background rəngini də yenilə
+                              const checkboxCell = e.currentTarget.querySelector('td[data-column-key="checkbox"]') as HTMLElement
+                              if (checkboxCell) {
+                                checkboxCell.style.background = '#f5f5f5'
+                              }
                             }
                           }}
                           onMouseLeave={(e) => {
                             if (!isSelected) {
                               e.currentTarget.style.background = 'white'
+                              // Checkbox sütununun background rəngini də yenilə
+                              const checkboxCell = e.currentTarget.querySelector('td[data-column-key="checkbox"]') as HTMLElement
+                              if (checkboxCell) {
+                                checkboxCell.style.background = 'white'
+                              }
                             }
                           }}
                         >
@@ -3013,15 +3076,34 @@ export default function Alicilar() {
                               width: `${width}px`,
                               minWidth: `${width}px`,
                               maxWidth: `${width}px`,
+                              overflow: isCheckbox ? 'visible' : 'hidden',
+                              textOverflow: isCheckbox ? 'clip' : 'ellipsis',
+                              whiteSpace: isCheckbox ? 'normal' : 'nowrap',
+                              position: isCheckbox ? 'sticky' : 'relative',
+                              left: isCheckbox ? 0 : 'auto',
+                              zIndex: isCheckbox ? 5 : 'auto',
+                              background: isCheckbox ? '#f5f5f5' : 'transparent',
                             }
 
                             if (isCheckbox) {
+                              // Checkbox sütunu üçün background rəngini seçilmiş sətirə görə təyin et
+                              cellStyle.background = isSelected ? '#e3f2fd' : '#f5f5f5'
                               cellContent = (
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
-                                  onChange={() => handleSelect(customer.id)}
-                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={() => {
+                                    // Normal klik üçün (Ctrl basılmadıqda)
+                                    handleSelect(customer.id)
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    // Ctrl+Click üçün checkbox-da da işləsin
+                                    if (e.ctrlKey || e.metaKey) {
+                                      e.preventDefault() // onChange-in trigger olmasının qarşısını al
+                                      handleSelect(customer.id, e)
+                                    }
+                                  }}
                                   style={{
                                     width: '20px',
                                     height: '20px',
@@ -3054,6 +3136,7 @@ export default function Alicilar() {
                             return (
                               <td
                                 key={columnKey}
+                                data-column-key={columnKey}
                                 style={cellStyle}
                                 onClick={columnKey === 'folder' && customer.folder_id ? (e) => {
                                   e.stopPropagation()
@@ -3082,6 +3165,7 @@ export default function Alicilar() {
                     })}
                   </tbody>
                 </table>
+                </div>
               </div>
             )}
           </div>
@@ -3648,10 +3732,10 @@ export default function Alicilar() {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
                         <tr style={{ background: '#f5f5f5', borderBottom: '2px solid #e0e0e0' }}>
-                          <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold', fontSize: '0.875rem' }}>Sütun</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 'bold', fontSize: '0.875rem' }}>Göstər</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 'bold', fontSize: '0.875rem' }}>Genişlik</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 'bold', fontSize: '0.875rem' }}>Yer</th>
+                          <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold', fontSize: '0.875rem', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>Sütun</th>
+                          <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 'bold', fontSize: '0.875rem', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>Göstər</th>
+                          <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 'bold', fontSize: '0.875rem', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>Genişlik</th>
+                          <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 'bold', fontSize: '0.875rem', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>Yer</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3764,118 +3848,77 @@ export default function Alicilar() {
               {settingsTab === 'functions' && (
                 <div>
                   <h3 style={{ fontSize: '1rem', fontWeight: 'bold', marginBottom: '1rem' }}>
-                    Navbar Gesture Ayarları
+                    Navbar görünürlüyü
                   </h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
-                    {/* Yuxarı Navbar Gesture */}
-                    <div style={{ 
-                      padding: '1rem', 
-                      border: '1px solid #e0e0e0', 
-                      borderRadius: '8px',
-                      background: 'white',
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                        <label style={{ fontSize: '0.875rem', fontWeight: '500', cursor: 'pointer' }}>
-                          Yuxarı Navbar Gesture
-                        </label>
-                        <label style={{ 
-                          position: 'relative', 
-                          display: 'inline-block', 
-                          width: '50px', 
-                          height: '26px',
-                          cursor: 'pointer',
-                        }}>
-                          <input
-                            type="checkbox"
-                            checked={topNavbarGestureEnabled}
-                            onChange={(e) => setTopNavbarGestureEnabled(e.target.checked)}
-                            style={{ opacity: 0, width: 0, height: 0 }}
-                          />
-                          <span style={{
-                            position: 'absolute',
-                            cursor: 'pointer',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            backgroundColor: topNavbarGestureEnabled ? '#1976d2' : '#ccc',
-                            transition: '0.3s',
-                            borderRadius: '26px',
-                          }}>
-                            <span style={{
-                              position: 'absolute',
-                              content: '""',
-                              height: '20px',
-                              width: '20px',
-                              left: '3px',
-                              bottom: '3px',
-                              backgroundColor: 'white',
-                              transition: '0.3s',
-                              borderRadius: '50%',
-                              transform: topNavbarGestureEnabled ? 'translateX(24px)' : 'translateX(0)',
-                            }} />
-                          </span>
-                        </label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '2rem' }}>
+                    <label 
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '0.75rem', 
+                        fontSize: '0.875rem', 
+                        cursor: 'pointer',
+                        padding: '0.75rem',
+                        borderRadius: '6px',
+                        border: '2px solid #e0e0e0',
+                        background: 'white',
+                      }}
+                    >
+                      <input 
+                        type="checkbox" 
+                        checked={topNavbarVisible}
+                        onChange={(e) => {
+                          const checked = e.target.checked
+                          setTopNavbarVisible(checked)
+                          localStorage.setItem('topNavbarVisible', String(checked))
+                          // Layout komponentindən import edilmiş funksiyaları çağır
+                          if (typeof window !== 'undefined' && (window as any).setTopNavbarVisible) {
+                            (window as any).setTopNavbarVisible(checked)
+                          }
+                          // Custom event göndər
+                          window.dispatchEvent(new Event('navbarVisibilityChange'))
+                        }}
+                        style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: '0.25rem' }}>Yuxarı navbar</div>
+                        <div style={{ fontSize: '0.75rem', color: '#666' }}>Yuxarıdakı navbarı göstər və ya gizlət</div>
                       </div>
-                      <p style={{ fontSize: '0.75rem', color: '#666', margin: 0 }}>
-                        Yuxarı navbar-ı scroll gesture ilə gizlətmək/göstərmək
-                      </p>
-                    </div>
-                    
-                    {/* Aşağı Navbar Gesture */}
-                    <div style={{ 
-                      padding: '1rem', 
-                      border: '1px solid #e0e0e0', 
-                      borderRadius: '8px',
-                      background: 'white',
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                        <label style={{ fontSize: '0.875rem', fontWeight: '500', cursor: 'pointer' }}>
-                          Aşağı Navbar Gesture
-                        </label>
-                        <label style={{ 
-                          position: 'relative', 
-                          display: 'inline-block', 
-                          width: '50px', 
-                          height: '26px',
-                          cursor: 'pointer',
-                        }}>
-                          <input
-                            type="checkbox"
-                            checked={bottomNavbarGestureEnabled}
-                            onChange={(e) => setBottomNavbarGestureEnabled(e.target.checked)}
-                            style={{ opacity: 0, width: 0, height: 0 }}
-                          />
-                          <span style={{
-                            position: 'absolute',
-                            cursor: 'pointer',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            backgroundColor: bottomNavbarGestureEnabled ? '#1976d2' : '#ccc',
-                            transition: '0.3s',
-                            borderRadius: '26px',
-                          }}>
-                            <span style={{
-                              position: 'absolute',
-                              content: '""',
-                              height: '20px',
-                              width: '20px',
-                              left: '3px',
-                              bottom: '3px',
-                              backgroundColor: 'white',
-                              transition: '0.3s',
-                              borderRadius: '50%',
-                              transform: bottomNavbarGestureEnabled ? 'translateX(24px)' : 'translateX(0)',
-                            }} />
-                          </span>
-                        </label>
+                    </label>
+                    <label 
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '0.75rem', 
+                        fontSize: '0.875rem', 
+                        cursor: 'pointer',
+                        padding: '0.75rem',
+                        borderRadius: '6px',
+                        border: '2px solid #e0e0e0',
+                        background: 'white',
+                      }}
+                    >
+                      <input 
+                        type="checkbox" 
+                        checked={bottomNavbarVisible}
+                        onChange={(e) => {
+                          const checked = e.target.checked
+                          setBottomNavbarVisible(checked)
+                          localStorage.setItem('bottomNavbarVisible', String(checked))
+                          // Layout komponentindən import edilmiş funksiyaları çağır
+                          if (typeof window !== 'undefined' && (window as any).setBottomNavbarVisible) {
+                            (window as any).setBottomNavbarVisible(checked)
+                          }
+                          // Custom event göndər
+                          window.dispatchEvent(new Event('navbarVisibilityChange'))
+                        }}
+                        style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: '0.25rem' }}>Aşağı navbar</div>
+                        <div style={{ fontSize: '0.75rem', color: '#666' }}>Aşağıdakı navbarı göstər və ya gizlət</div>
                       </div>
-                      <p style={{ fontSize: '0.75rem', color: '#666', margin: 0 }}>
-                        Aşağı navbar-ı scroll gesture ilə gizlətmək/göstərmək
-                      </p>
-                    </div>
+                    </label>
                   </div>
                   
                   <h3 style={{ fontSize: '1rem', fontWeight: 'bold', marginBottom: '1rem' }}>
@@ -4002,8 +4045,8 @@ export default function Alicilar() {
             onClick={(e) => e.stopPropagation()}
             style={{
               position: 'fixed',
-              top: `${contextMenu.y}px`,
-              left: `${contextMenu.x}px`,
+              top: `${contextMenu?.y || 0}px`,
+              left: `${contextMenu?.x || 0}px`,
               background: 'white',
               border: '1px solid #e0e0e0',
               borderRadius: '4px',
@@ -4014,7 +4057,7 @@ export default function Alicilar() {
           >
             <button
               onClick={() => {
-                if (contextMenu.folderId !== null) {
+                if (contextMenu && contextMenu.folderId !== null) {
                   setSelectedFolder(contextMenu.folderId)
                   setSelectedIds(new Set())
                   if (folderViewMode === 'accordion') {
@@ -4049,8 +4092,8 @@ export default function Alicilar() {
       {/* Toast Notification */}
       {toast && (
         <Toast
-          message={toast.message}
-          type={toast.type}
+          message={toast?.message || ''}
+          type={toast?.type || 'info'}
           onClose={() => setToast(null)}
         />
       )}

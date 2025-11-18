@@ -3,6 +3,14 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import Toast from './Toast'
 
+// Global navbar görünürlüyü funksiyaları üçün obyekt
+const navbarVisibilityControls = {
+  setTopNavbarVisible: null as ((visible: boolean) => void) | null,
+  setBottomNavbarVisible: null as ((visible: boolean) => void) | null,
+  getTopNavbarVisible: () => true,
+  getBottomNavbarVisible: () => true,
+}
+
 interface NavItem {
   path: string
   label: string
@@ -36,14 +44,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const sidebarRef = useRef<HTMLDivElement>(null)
   const [isDesktop, setIsDesktop] = useState(false)
   
-  // Navbar görünürlüyü (localStorage-dan oxu)
+  // Navbar görünürlüyü state-ləri
   const [topNavbarVisible, setTopNavbarVisible] = useState(() => {
     const saved = localStorage.getItem('topNavbarVisible')
-    return saved !== 'false' // Default: true, yalnız açıq şəkildə false olarsa false qaytar
+    return saved !== null ? saved === 'true' : true
   })
   const [bottomNavbarVisible, setBottomNavbarVisible] = useState(() => {
     const saved = localStorage.getItem('bottomNavbarVisible')
-    return saved !== 'false' // Default: true, yalnız açıq şəkildə false olarsa false qaytar
+    return saved !== null ? saved === 'true' : true
   })
   
   // Navbar görünürlüyünü localStorage-a yaz
@@ -54,6 +62,59 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     localStorage.setItem('bottomNavbarVisible', String(bottomNavbarVisible))
   }, [bottomNavbarVisible])
+  
+  // localStorage-dan navbar görünürlüyünü oxu və yenilə
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const topVisible = localStorage.getItem('topNavbarVisible')
+      const bottomVisible = localStorage.getItem('bottomNavbarVisible')
+      if (topVisible !== null) {
+        const newValue = topVisible === 'true'
+        if (newValue !== topNavbarVisible) {
+          setTopNavbarVisible(newValue)
+        }
+      }
+      if (bottomVisible !== null) {
+        const newValue = bottomVisible === 'true'
+        if (newValue !== bottomNavbarVisible) {
+          setBottomNavbarVisible(newValue)
+        }
+      }
+    }
+    
+    // Storage event-lərini dinlə
+    window.addEventListener('storage', handleStorageChange)
+    
+    // Custom event dinlə
+    window.addEventListener('navbarVisibilityChange', handleStorageChange)
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('navbarVisibilityChange', handleStorageChange)
+    }
+  }, [topNavbarVisible, bottomNavbarVisible])
+  
+  // Global funksiyalar navbar görünürlüyünü idarə etmək üçün
+  useEffect(() => {
+    navbarVisibilityControls.setTopNavbarVisible = setTopNavbarVisible
+    navbarVisibilityControls.setBottomNavbarVisible = setBottomNavbarVisible
+    navbarVisibilityControls.getTopNavbarVisible = () => topNavbarVisible
+    navbarVisibilityControls.getBottomNavbarVisible = () => bottomNavbarVisible
+    
+    // Window obyektinə də əlavə et (əgər mövcuddursa)
+    if (typeof window !== 'undefined' && window) {
+      try {
+        (window as any).setTopNavbarVisible = setTopNavbarVisible
+        (window as any).setBottomNavbarVisible = setBottomNavbarVisible
+        (window as any).getTopNavbarVisible = () => topNavbarVisible
+        (window as any).getBottomNavbarVisible = () => bottomNavbarVisible
+      } catch (error) {
+        // Ignore error
+      }
+    }
+  }, [topNavbarVisible, bottomNavbarVisible])
+  
+  // Navbar-lar həmişə görünür olacaq (gesture funksiyası deaktivdir)
   
   
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
@@ -113,117 +174,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setMenuOpen(false)
   }, [location.pathname])
-  
-  // Scroll gesture detection (sənin istədiyin qaydada sadə loqika)
-// FINAL — Correct Touch Gesture Logic
-// FINAL — TOUCH GESTURE WITH LOCK DELAY
-// FINAL — LOCKED TOUCH GESTURES WITH STATE-AWARE LOGIC
-// FINAL — TOUCH GESTURES WITH PERFECT LOCK & RESET
-useEffect(() => {
-  if (!isAuthenticated || isDesktop) return
-
-  let startY = 0
-  let lastDir: 'up' | 'down' | null = null
-  let count = 0
-  let lastGestureTime = 0
-
-  let locked = false
-  const LOCK_DELAY = 5000 // 3 saniyə
-
-  const resetGesture = () => {
-    count = 0
-    lastDir = null
-  }
-
-  const lockGestures = () => {
-    locked = true
-    resetGesture()
-    setTimeout(() => {
-      locked = false
-    }, LOCK_DELAY)
-  }
-
-  const handleTouchStart = (e: TouchEvent) => {
-    startY = e.touches[0].clientY
-  }
-
-  const handleTouchMove = (e: TouchEvent) => {
-    // ❌ Lock aktivdirsə — gesture qətiyyən sayılmır
-    if (locked) return
-
-    const currentY = e.touches[0].clientY
-    const delta = currentY - startY
-
-    if (Math.abs(delta) < 30) return
-
-    const dir: 'up' | 'down' = delta < 0 ? 'up' : 'down'
-    const now = Date.now()
-
-    // istiqamət dəyişibsə və ya gecikibsə → reset
-    if (dir !== lastDir || now - lastGestureTime > 900) {
-      resetGesture()
-    }
-
-    // çox tez gələn event → sayma
-    if (now - lastGestureTime < 120) return
-
-    count++
-    lastDir = dir
-    lastGestureTime = now
-
-    //
-    // YUXARI NAVBAR GESTURE
-    //
-    if (dir === 'up') {
-      // 3 UP → GİZLƏ (yalnız görünürsə)
-      if (count === 3 && topNavbarVisible) {
-        setTopNavbarVisible(false)
-        setToast({ message: 'Yuxarı navbar gizləndi', type: 'info' })
-        lockGestures()
-        return
-      }
-
-      // 2 UP → GÖSTƏR (yalnız gizlidirsə)
-      if (count === 2 && !topNavbarVisible) {
-        setTopNavbarVisible(true)
-        setToast({ message: 'Yuxarı navbar göstərildi', type: 'success' })
-        lockGestures()
-        return
-      }
-    }
-
-    //
-    // ALT NAVBAR GESTURE
-    //
-    if (dir === 'down') {
-      // 3 DOWN → GİZLƏ (yalnız görünürsə)
-      if (count === 3 && bottomNavbarVisible) {
-        setBottomNavbarVisible(false)
-        setToast({ message: 'Aşağı navbar gizləndi', type: 'info' })
-        lockGestures()
-        return
-      }
-
-      // 2 DOWN → GÖSTƏR (yalnız gizlidirsə)
-      if (count === 2 && !bottomNavbarVisible) {
-        setBottomNavbarVisible(true)
-        setToast({ message: 'Aşağı navbar göstərildi', type: 'success' })
-        lockGestures()
-        return
-      }
-    }
-
-    startY = currentY
-  }
-
-  document.body.addEventListener('touchstart', handleTouchStart, { passive: true })
-  document.body.addEventListener('touchmove', handleTouchMove, { passive: true })
-
-  return () => {
-    document.body.removeEventListener('touchstart', handleTouchStart)
-    document.body.removeEventListener('touchmove', handleTouchMove)
-  }
-}, [isAuthenticated, isDesktop, topNavbarVisible, bottomNavbarVisible])
 
 
   const handleLogout = () => {
@@ -256,12 +206,13 @@ useEffect(() => {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Top Navigation */}
+      {topNavbarVisible && (
       <nav
         style={{
           background: '#1976d2',
           color: 'white',
           padding: '0.75rem 1rem',
-          display: topNavbarVisible ? 'flex' : 'none',
+          display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           position: 'sticky',
@@ -315,6 +266,7 @@ useEffect(() => {
           </div>
         )}
       </nav>
+      )}
 
       {/* Main Layout Container */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -468,7 +420,8 @@ useEffect(() => {
         <main
           style={{
             flex: 1,
-            paddingBottom: isAuthenticated && !isDesktop ? '70px' : '0',
+            paddingTop: topNavbarVisible ? '0' : '0',
+            paddingBottom: isAuthenticated && !isDesktop && bottomNavbarVisible ? '70px' : '0',
             overflowY: 'auto',
             WebkitOverflowScrolling: 'touch',
             minWidth: 0, // Flex item overflow üçün
@@ -479,7 +432,7 @@ useEffect(() => {
       </div>
 
       {/* Bottom Navigation (only for authenticated users and mobile) */}
-      {isAuthenticated && !isDesktop && (
+      {isAuthenticated && !isDesktop && bottomNavbarVisible && (
         <>
           <nav
             style={{
@@ -489,7 +442,7 @@ useEffect(() => {
               right: 0,
               background: 'white',
               borderTop: '1px solid #e0e0e0',
-              display: bottomNavbarVisible ? 'flex' : 'none',
+              display: 'flex',
               justifyContent: 'space-around',
               alignItems: 'center',
               padding: '0.5rem 0',
@@ -773,30 +726,4 @@ useEffect(() => {
   )
 }
 
-// Navbar gesture ayarlarını export et ki, Alici.tsx-də istifadə edə bilsin
-export const useNavbarGestureSettings = () => {
-  const [topNavbarGestureEnabled, setTopNavbarGestureEnabled] = useState(() => {
-    const saved = localStorage.getItem('topNavbarGestureEnabled')
-    return saved === 'true'
-  })
-  const [bottomNavbarGestureEnabled, setBottomNavbarGestureEnabled] = useState(() => {
-    const saved = localStorage.getItem('bottomNavbarGestureEnabled')
-    return saved === 'true'
-  })
-  
-  useEffect(() => {
-    localStorage.setItem('topNavbarGestureEnabled', String(topNavbarGestureEnabled))
-  }, [topNavbarGestureEnabled])
-  
-  useEffect(() => {
-    localStorage.setItem('bottomNavbarGestureEnabled', String(bottomNavbarGestureEnabled))
-  }, [bottomNavbarGestureEnabled])
-  
-  return {
-    topNavbarGestureEnabled,
-    setTopNavbarGestureEnabled,
-    bottomNavbarGestureEnabled,
-    setBottomNavbarGestureEnabled,
-  }
-}
 
