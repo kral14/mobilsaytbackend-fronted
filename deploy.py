@@ -247,6 +247,30 @@ __pycache__/
             elif status.startswith('A'):
                 print(f"  ➕ Əlavə edildi: {file}")
     
+    # Remote yoxla (commit-dən əvvəl)
+    print("\n" + "=" * 60)
+    stdout, stderr, code = run_command('git remote -v', check=False)
+    default_remote = "https://github.com/kral14/mobilsayt.git"
+    
+    if code != 0 or not stdout:
+        print("⚠️  Remote repository yoxdur!")
+        print(f"💡 Default remote URL: {default_remote}")
+        add_remote = input("   Bu remote URL-i istifadə etmək istəyirsiniz? (y/n): ").strip().lower()
+        
+        if add_remote == 'y' or add_remote == '':
+            remote_url = default_remote
+        else:
+            remote_url = input("   Remote URL daxil edin: ").strip()
+            if not remote_url:
+                remote_url = default_remote
+                print(f"   Default URL istifadə edilir: {remote_url}")
+        
+        run_command(f'git remote add origin {remote_url}')
+        print(f"✅ Remote əlavə edildi: {remote_url}")
+    else:
+        remote_info = stdout.split('\n')[0].split()[1] if stdout else 'mövcuddur'
+        print(f"✅ Remote repository: {remote_info}")
+    
     # Commit mesajı soruş
     print("\n" + "=" * 60)
     default_message = f"Deploy: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
@@ -290,23 +314,6 @@ __pycache__/
             stdout, stderr, code = run_command('git branch -M main', check=False)
         current_branch = 'main'
         print(f"✅ Branch: {current_branch}")
-    
-    # Remote yoxla
-    stdout, stderr, code = run_command('git remote -v', check=False)
-    if code != 0 or not stdout:
-        print("\n⚠️  Remote repository yoxdur!")
-        add_remote = input("   Remote əlavə etmək istəyirsiniz? (y/n): ").strip().lower()
-        if add_remote == 'y':
-            remote_url = input("   Remote URL (məsələn: https://github.com/kral14/mobilsayt.git): ").strip()
-            if remote_url:
-                run_command(f'git remote add origin {remote_url}')
-                print(f"✅ Remote əlavə edildi: {remote_url}")
-            else:
-                print("❌ Remote URL boşdur!")
-                sys.exit(1)
-        else:
-            print("ℹ️  Remote olmadan push edilə bilməz")
-            sys.exit(0)
     
     # Git push
     print(f"\n🚀 GitHub-a push edilir (branch: {current_branch})...")
