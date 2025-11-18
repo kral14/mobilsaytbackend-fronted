@@ -89,7 +89,7 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({
   customers = [], 
   suppliers = [],
   products, 
-  modalIndex, 
+  modalIndex: _modalIndex, 
   isActive, 
   onClose, 
   onUpdate, 
@@ -112,7 +112,7 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [localSize, setLocalSize] = useState<{ width: number, height: number } | null>(null)
   
   // Window store
-  const { windows, minimizeWindow, restoreWindow, updateWindow } = useWindowStore()
+  const { windows, minimizeWindow, updateWindow } = useWindowStore()
   const windowInfo = windows.get(windowId)
   const isMinimized = windowInfo?.isMinimized || false
   const isVisible = windowInfo?.isVisible !== false
@@ -343,12 +343,12 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({
     setLocalData({ ...localData, invoiceItems: updatedItems })
   }
   
-  const handleRemoveItem = (index: number) => {
+  const _handleRemoveItem = (index: number) => {
     const newItems = localData.invoiceItems.filter((_, i) => i !== index)
     setLocalData({ ...localData, invoiceItems: newItems })
   }
   
-  const handleToggleItemSelection = (index: number) => {
+  const _handleToggleItemSelection = (index: number) => {
     if (selectedItemIndices.includes(index)) {
       setSelectedItemIndices(selectedItemIndices.filter(i => i !== index))
     } else {
@@ -356,7 +356,7 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({
     }
   }
   
-  const handleSelectAllItems = () => {
+  const _handleSelectAllItems = () => {
     if (selectedItemIndices.length === localData.invoiceItems.length) {
       setSelectedItemIndices([])
     } else {
@@ -520,7 +520,7 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({
   }, [localData.invoiceItems])
   
   // Sütunları sıralı olarak al
-  const getSortedColumns = () => {
+  const _getSortedColumns = () => {
     return Object.entries(columnConfig)
       .sort(([, a], [, b]) => a.order - b.order)
       .map(([key]) => key)
@@ -641,7 +641,7 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({
     }
   }
 
-  const totalAmount = localData.invoiceItems.reduce((sum, item) => sum + Number(item.total_price || 0), 0)
+  const _totalAmount = localData.invoiceItems.reduce((sum, item) => sum + Number(item.total_price || 0), 0)
 
   // OK düyməsi funksiyası - yadda saxla, təsdiqlə və bağla
   const handleOK = async () => {

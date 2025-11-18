@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import Layout from '../components/Layout'
 import ProtectedRoute from '../components/ProtectedRoute'
 import { productsAPI } from '../services/api'
-import type { Product } from '../../../shared/types'
+import type { Product } from '@shared/types'
 
 export default function Products() {
   const [products, setProducts] = useState<Product[]>([])

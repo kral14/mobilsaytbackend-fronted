@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { User, Customer } from '../../../shared/types'
+import type { User, Customer } from '@shared/types'
 import { authAPI } from '../services/api'
 
 interface AuthState {
@@ -14,7 +14,7 @@ interface AuthState {
   setCustomer: (customer: Customer) => void
 }
 
-export const useAuthStore = create<AuthState>((set, get) => {
+export const useAuthStore = create<AuthState>((set) => {
   // localStorage-dan ilkin dəyərləri yüklə
   const storedToken = localStorage.getItem('token')
   const storedUser = localStorage.getItem('user')

@@ -78,7 +78,7 @@ export interface DataTableProps<T = any> {
 
 export default function DataTable<T = any>({
   pageId,
-  columns: initialColumns,
+  columns: _columns,
   data,
   loading = false,
   error = '',
@@ -975,7 +975,7 @@ export default function DataTable<T = any>({
                   return (
                     <tr
                       key={rowId}
-                      onDoubleClick={(e) => {
+                      onDoubleClick={() => {
                         // Dubl klik zamanı sənədi aç
                         if (onRowClick) {
                           onRowClick(row, rowId)

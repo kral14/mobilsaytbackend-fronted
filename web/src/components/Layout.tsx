@@ -25,7 +25,7 @@ function Taskbar({ openRoutes, setOpenRoutes, location, navigate }: {
   location: ReturnType<typeof useLocation>
   navigate: ReturnType<typeof useNavigate>
 }) {
-  const { windows, activateWindow, removeWindow, tileWindows } = useWindowStore()
+  const { windows, activateWindow, removeWindow } = useWindowStore()
   
   // Bütün pəncərələri birləşdir: routes + modals
   const allTaskbarItems: Array<{ id: string, title: string, icon: string, isActive: boolean, type: 'route' | 'modal', route?: string, onClick: () => void, onClose: () => void }> = []

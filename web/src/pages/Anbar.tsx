@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import Layout from '../components/Layout'
 import ProtectedRoute from '../components/ProtectedRoute'
 import { productsAPI, categoriesAPI } from '../services/api'
-import type { Product, Category } from '../../../shared/types'
+import type { Product, Category } from '@shared/types'
 
 interface ColumnConfig {
   id: string
@@ -861,7 +861,7 @@ export default function Anbar() {
                 const quantity = getWarehouseQuantity(product)
                 const salePrice = parseFloat(product.sale_price?.toString() || '0')
                 const qty = parseFloat(quantity.toString())
-                const total = salePrice * qty
+                const _total = salePrice * qty
                 
                 return `
                   <tr>
@@ -1124,7 +1124,7 @@ export default function Anbar() {
     setDraggedColumn(columnId)
   }
 
-  const handleDragOver = (e: React.DragEvent, columnId: string) => {
+  const handleDragOver = (e: React.DragEvent, _columnId: string) => {
     e.preventDefault()
     e.stopPropagation()
     // Yalnız visual feedback üçün, real yenidən sıralama handleDrop-da olacaq
@@ -1334,7 +1334,7 @@ export default function Anbar() {
     }
 
     try {
-      await categoriesAPI.update(category.id.toString(), { parent_id: newParentId })
+      await categoriesAPI.update(category.id.toString(), { parent_id: newParentId ?? undefined })
       await loadCategories()
     } catch (err: any) {
       alert('Papka köçürülərkən xəta baş verdi')

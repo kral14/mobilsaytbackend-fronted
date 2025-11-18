@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { ordersAPI } from '../services/api'
-import type { SaleInvoice } from '../../../shared/types'
+import type { SaleInvoice } from '@shared/types'
 import { calculateDaysDifference } from '../utils/dateUtils'
 
 export default function Home() {

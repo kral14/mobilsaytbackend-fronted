@@ -43,7 +43,7 @@ const PurchaseInvoiceModal: React.FC<PurchaseInvoiceModalProps> = ({
   modal, 
   suppliers, 
   products, 
-  modalIndex, 
+  modalIndex: _modalIndex, 
   isActive, 
   onClose, 
   onUpdate, 
@@ -58,7 +58,7 @@ const PurchaseInvoiceModal: React.FC<PurchaseInvoiceModalProps> = ({
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0 })
   
   // Window store
-  const { windows, minimizeWindow, restoreWindow } = useWindowStore()
+  const { windows, minimizeWindow } = useWindowStore()
   const windowInfo = windows.get(windowId)
   const isMinimized = windowInfo?.isMinimized || false
   const isVisible = windowInfo?.isVisible !== false
