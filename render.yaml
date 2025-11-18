@@ -41,6 +41,13 @@ services:
     <script>
       // Device detection - mobil və ya PC
       (function() {
+        const host = window.location.hostname.toLowerCase();
+        const path = window.location.pathname;
+        
+        // Xüsusi domain-lər üçün məcburi yönləndirmə
+        const isWebDomain = host.includes('mobilsayt-web');
+        const isMobileDomain = host.includes('mobilsayt-mobil');
+
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
                         (window.innerWidth <= 768 && window.innerHeight <= 1024);
         
@@ -49,10 +56,23 @@ services:
         const version = urlParams.get('v');
         
         // Path-dən versiyanı müəyyən et
-        const path = window.location.pathname;
         const isMobilePath = path.startsWith('/mobil');
         const isWebPath = path.startsWith('/web');
         
+        const buildUrl = (basePath) => {
+          return basePath + path + window.location.search + window.location.hash;
+        };
+
+        if (isMobileDomain) {
+          window.location.href = buildUrl('/mobil');
+          return;
+        }
+
+        if (isWebDomain) {
+          window.location.href = buildUrl('/web');
+          return;
+        }
+
         if (isMobilePath) {
           // Artıq mobil path-dədirsə, mobil versiyasına yönləndir
           window.location.href = '/mobil' + path.replace('/mobil', '') + window.location.search + window.location.hash;
