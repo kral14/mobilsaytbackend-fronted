@@ -250,7 +250,9 @@ __pycache__/
     # Remote yoxla (commit-dən əvvəl)
     print("\n" + "=" * 60)
     stdout, stderr, code = run_command('git remote -v', check=False)
-    default_remote = "https://github.com/kral14/mobilsayt.git"
+    # Default remote artıq yeni repo-ya işarə edir
+    default_remote = "https://github.com/kral14/mobilsaytbackend-fronted.git"
+    old_remote = "https://github.com/kral14/mobilsayt.git"
     
     if code != 0 or not stdout:
         print("⚠️  Remote repository yoxdur!")
@@ -270,6 +272,14 @@ __pycache__/
     else:
         remote_info = stdout.split('\n')[0].split()[1] if stdout else 'mövcuddur'
         print(f"✅ Remote repository: {remote_info}")
+        
+        # Əgər köhnə repo istifadə olunursa, avtomatik yeni repo-ya keç
+        if remote_info == old_remote:
+            print("\n🔄 Köhnə GitHub repo aşkar edildi:")
+            print(f"   {remote_info}")
+            print("   Remote avtomatik olaraq yeni repo-ya yönləndirilir...")
+            run_command(f'git remote set-url origin {default_remote}')
+            print(f"✅ Remote yeniləndi: {default_remote}")
     
     # Commit mesajı soruş
     print("\n" + "=" * 60)

@@ -35,32 +35,48 @@ const PORT = Number(process.env.PORT) || 5000
 
 // CORS konfiqurasiyası
 const allowedOrigins = [
+  // Render frontend domenləri
   'https://mobilsayt-web.onrender.com',
   'https://mobilsayt-frontend.onrender.com',
+  'https://mobilsayt-mobil.onrender.com',
+  // Local development
   'http://localhost:3000',
   'http://localhost:3001',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3001'
 ]
 
-const corsOptions = {
-  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    // Origin yoxdursa (məsələn, Postman, mobile app və s.), icazə ver
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // Origin yoxdursa (məsələn, Postman, server-server request), icazə ver
     if (!origin) {
       return callback(null, true)
     }
-    
-    // Allowed origins siyahısında varsa, icazə ver
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true)
-    } else {
-      // Development mühitində bütün origin-lərə icazə ver
-      if (process.env.NODE_ENV === 'development') {
-        callback(null, true)
-      } else {
-        callback(new Error('CORS policy: Origin not allowed'))
-      }
+
+    // Əsas whitelist yoxlaması
+    const isWhitelisted = allowedOrigins.includes(origin)
+
+    // Əlavə: hər ehtimala qarşı bütün `mobilsayt-*.onrender.com` domenlərini icazə ver
+    let isRenderMobilsayt = false
+    try {
+      const url = new URL(origin)
+      isRenderMobilsayt =
+        url.hostname.endsWith('.onrender.com') && url.hostname.startsWith('mobilsayt-')
+    } catch {
+      // URL parse alınmasa, nəzərə alma
     }
+
+    if (isWhitelisted || isRenderMobilsayt) {
+      return callback(null, true)
+    }
+
+    // Development mühitində bütün origin-lərə icazə ver (debug üçün)
+    if (process.env.NODE_ENV === 'development') {
+      return callback(null, true)
+    }
+
+    console.error('❌ CORS bloklandı. Origin icazəli deyil:', origin)
+    return callback(new Error('CORS policy: Origin not allowed'))
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
