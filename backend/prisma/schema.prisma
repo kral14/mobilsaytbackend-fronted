@@ -138,6 +138,8 @@ model suppliers {
   updated_at        DateTime?           @default(now()) @db.Timestamp(6)
   balance           Decimal?            @default(0) @db.Decimal(10, 2)
   purchase_invoices purchase_invoices[]
+  folder_id         Int?
+  folder            supplier_folders?   @relation(fields: [folder_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
 }
 
 model users {
@@ -166,4 +168,15 @@ model customer_folders {
   parent      customer_folders?  @relation("CustomerFolderTree", fields: [parent_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
   children    customer_folders[] @relation("CustomerFolderTree")
   customers   customers[]
+}
+
+model supplier_folders {
+  id         Int                 @id @default(autoincrement())
+  name       String              @db.VarChar(255)
+  parent_id  Int?
+  created_at DateTime?           @default(now()) @db.Timestamp(6)
+  updated_at DateTime?           @default(now()) @db.Timestamp(6)
+  parent     supplier_folders?   @relation("SupplierFolderTree", fields: [parent_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  children   supplier_folders[]  @relation("SupplierFolderTree")
+  suppliers  suppliers[]
 }

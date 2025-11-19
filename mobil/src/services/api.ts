@@ -226,7 +226,7 @@ export const customersAPI = {
   },
 }
 
-// Customer Folders API
+// Customer Folders API (Alıcılar üçün)
 export const customerFoldersAPI = {
   getAll: async (): Promise<any[]> => {
     const response = await api.get<any[]>('/customer-folders')
@@ -248,7 +248,29 @@ export const customerFoldersAPI = {
   },
 }
 
-// Suppliers API
+// Supplier Folders API (Satıcılar üçün)
+export const supplierFoldersAPI = {
+  getAll: async (): Promise<any[]> => {
+    const response = await api.get<any[]>('/supplier-folders')
+    return response.data
+  },
+
+  create: async (data: { name: string; parent_id?: number | null }): Promise<any> => {
+    const response = await api.post<any>('/supplier-folders', data)
+    return response.data
+  },
+
+  update: async (id: string, data: { name: string; parent_id?: number | null }): Promise<any> => {
+    const response = await api.put<any>(`/supplier-folders/${id}`, data)
+    return response.data
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/supplier-folders/${id}`)
+  },
+}
+
+// Suppliers API (Satıcılar siyahısı)
 export const suppliersAPI = {
   getAll: async (): Promise<Supplier[]> => {
     const response = await api.get<Supplier[]>('/suppliers')

@@ -10,6 +10,7 @@ import categoryRoutes from './routes/categoryRoutes'
 import customerRoutes from './routes/customerRoutes'
 import customerFolderRoutes from './routes/customerFolderRoutes'
 import supplierRoutes from './routes/supplierRoutes'
+import supplierFolderRoutes from './routes/supplierFolderRoutes'
 import purchaseInvoiceRoutes from './routes/purchaseInvoiceRoutes'
 import testRoutes from './routes/testRoutes'
 
@@ -106,6 +107,7 @@ app.use('/api/categories', categoryRoutes)
 app.use('/api/customers', customerRoutes)
 app.use('/api/customer-folders', customerFolderRoutes)
 app.use('/api/suppliers', supplierRoutes)
+app.use('/api/supplier-folders', supplierFolderRoutes)
 app.use('/api/purchase-invoices', purchaseInvoiceRoutes)
 app.use('/api/test', testRoutes)
 

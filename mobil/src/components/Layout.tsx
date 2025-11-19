@@ -3,14 +3,6 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import Toast from './Toast'
 
-// Global navbar görünürlüyü funksiyaları üçün obyekt
-const navbarVisibilityControls = {
-  setTopNavbarVisible: null as ((visible: boolean) => void) | null,
-  setBottomNavbarVisible: null as ((visible: boolean) => void) | null,
-  getTopNavbarVisible: () => true,
-  getBottomNavbarVisible: () => true,
-}
-
 interface NavItem {
   path: string
   label: string
@@ -37,9 +29,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
-  const [qaimelerMenuOpen, setQaimelerMenuOpen] = useState(false)
-  const [kassaMenuOpen, setKassaMenuOpen] = useState(false)
-  const [carilerMenuOpen, setCarilerMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const sidebarRef = useRef<HTMLDivElement>(null)
   const [isDesktop, setIsDesktop] = useState(false)
@@ -91,26 +80,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return () => {
       window.removeEventListener('storage', handleStorageChange)
       window.removeEventListener('navbarVisibilityChange', handleStorageChange)
-    }
-  }, [topNavbarVisible, bottomNavbarVisible])
-  
-  // Global funksiyalar navbar görünürlüyünü idarə etmək üçün
-  useEffect(() => {
-    navbarVisibilityControls.setTopNavbarVisible = setTopNavbarVisible
-    navbarVisibilityControls.setBottomNavbarVisible = setBottomNavbarVisible
-    navbarVisibilityControls.getTopNavbarVisible = () => topNavbarVisible
-    navbarVisibilityControls.getBottomNavbarVisible = () => bottomNavbarVisible
-    
-    // Window obyektinə də əlavə et (əgər mövcuddursa)
-    if (typeof window !== 'undefined' && window) {
-      try {
-        (window as any).setTopNavbarVisible = setTopNavbarVisible
-        (window as any).setBottomNavbarVisible = setBottomNavbarVisible
-        (window as any).getTopNavbarVisible = () => topNavbarVisible
-        (window as any).getBottomNavbarVisible = () => bottomNavbarVisible
-      } catch (error) {
-        // Ignore error
-      }
     }
   }, [topNavbarVisible, bottomNavbarVisible])
   
@@ -183,25 +152,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }
 
   const visibleNavItems = navItems.filter(item => !item.requiresAuth || isAuthenticated)
-  
-  // Bottom nav items - Məhsulları çıxartdıq
-  const bottomNavItems = [
-    { path: '/', label: 'Ana Səhifə', icon: '🏠', type: 'link' as const },
-    { path: '/qaimeler', label: 'Qaimələr', icon: '📄', type: 'submenu' as const, submenu: [
-      { path: '/qaimeler/alis', label: 'Alış Qaimə', icon: '📋' },
-      { path: '/qaimeler/satis', label: 'Satış Qaimə', icon: '📄' }
-    ]},
-    { path: '/kassa', label: 'Kassa', icon: '💵', type: 'submenu' as const, submenu: [
-      { path: '/kassa/medaxil', label: 'Kassa Medaxil', icon: '💵' },
-      { path: '/kassa/mexaric', label: 'Kassa Mexaric', icon: '💸' }
-    ]},
-    { path: '/cariler', label: 'Carilər', icon: '👥', type: 'submenu' as const, submenu: [
-      { path: '/musteriler/alici', label: 'Alıcılar', icon: '🧑‍🤝‍🧑' },
-      { path: '/musteriler/satici', label: 'Satıcılar', icon: '🏢' }
-    ]},
-    { path: '/hesablar', label: 'Hesablar', icon: '💰', type: 'link' as const },
-    { path: '/anbar', label: 'Anbar', icon: '📦', type: 'link' as const },
-  ]
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>

@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import Layout from '../../components/Layout'
 import Toast from '../../components/Toast'
-import { customersAPI, customerFoldersAPI } from '../../services/api'
-import type { Customer } from '@shared/types'
+import { customerFoldersAPI, suppliersAPI } from '../../services/api'
+import type { Customer, Supplier } from '@shared/types'
 
 interface Folder {
   id: number
@@ -12,7 +12,7 @@ interface Folder {
   customer_count?: number
 }
 
-export default function Alicilar() {
+export default function Saticilar() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
@@ -539,14 +539,32 @@ export default function Alicilar() {
   const loadCustomers = async () => {
     try {
       setLoading(true)
-      const data = await customersAPI.getAll()
-      setCustomers(data)
+      const suppliers = await suppliersAPI.getAll()
+      // Satıcıları mövcud cədvəl strukturu üçün müştəri obyektinə map edək
+      const mappedCustomers: Customer[] = suppliers.map((s: Supplier) => ({
+        id: s.id,
+        code: null,
+        name: s.name,
+        phone: s.phone,
+        email: s.email,
+        address: s.address,
+        balance: s.balance,
+        folder_id: null,
+        is_active: null,
+        created_at: s.created_at,
+        updated_at: s.updated_at,
+      }))
+      setCustomers(mappedCustomers)
     } catch (error: any) {
-      console.error('Alıcılar yüklənərkən xəta:', error)
+      console.error('Satıcılar yüklənərkən xəta:', error)
       // Network error varsa, backend server işləmir
       if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
         console.warn('Backend server işləmir. Zəhmət olmasa backend-i başlatın.')
       }
+      setToast({
+        message: error?.response?.data?.message || 'Satıcılar yüklənərkən xəta baş verdi',
+        type: 'error',
+      })
     } finally {
       setLoading(false)
     }
@@ -618,47 +636,15 @@ export default function Alicilar() {
 
   const handleDelete = async () => {
     if (selectedIds.size === 0) {
-      setToast({ message: 'Zəhmət olmasa silmək üçün müştəri seçin', type: 'info' })
+      setToast({ message: 'Zəhmət olmasa silmək üçün satıcı seçin', type: 'info' })
       return
     }
 
-    // Təsdiq soruş
-    const confirmMessage = selectedIds.size === 1
-      ? 'Bu müştərini silmək istədiyinizə əminsiniz?'
-      : `${selectedIds.size} müştərini silmək istədiyinizə əminsiniz?`
-
-    if (!window.confirm(confirmMessage)) {
-      return
-    }
-
-    try {
-      const selectedCount = selectedIds.size
-      const selectedIdsArray = Array.from(selectedIds)
-      
-      // Seçilmiş müştəriləri sil
-      const deletePromises = selectedIdsArray.map(id => 
-        customersAPI.delete(String(id))
-      )
-      
-      await Promise.all(deletePromises)
-
-      // Customers state-dən sil
-      setCustomers(customers.filter(c => !selectedIds.has(c.id)))
-      
-      // Seçimləri təmizlə
-      setSelectedIds(new Set())
-      
-      setToast({ 
-        message: `${selectedCount} müştəri uğurla silindi`, 
-        type: 'success' 
-      })
-    } catch (error: any) {
-      console.error('Müştəri silinərkən xəta:', error)
-      setToast({ 
-        message: error.response?.data?.message || 'Müştəri silinərkən xəta baş verdi', 
-        type: 'error' 
-      })
-    }
+    // Satıcılar üçün silmə funksiyası hələ backend-də yoxdur
+    setToast({
+      message: 'Satıcıları silmək funksiyası hələ aktiv deyil',
+      type: 'info',
+    })
   }
 
   const handleCopy = () => {
@@ -790,71 +776,12 @@ export default function Alicilar() {
     }
   }
 
-  const handleSaveCustomer = async (isActive: boolean = false) => {
-    if (!newCustomer.name.trim()) {
-      setToast({ message: 'Müştəri adı məcburidir', type: 'error' })
-      return
-    }
-
-    try {
-      if (editingCustomerId !== null) {
-        // Redaktə rejimi - Update
-        // Kod yoxdursa və ya boşdursa, null göndər ki, backend avtomatik generasiya etsin
-        const customerCode = newCustomer.code.trim() || null
-        const updatedCustomer = await customersAPI.update(String(editingCustomerId), {
-          code: customerCode,
-          name: newCustomer.name.trim(),
-          phone: newCustomer.phone.trim() || null,
-          email: newCustomer.email.trim() || null,
-          address: newCustomer.address.trim() || null,
-          folder_id: newCustomer.folder_id,
-          is_active: isActive,
-        })
-
-        // Customers state-ə yenilə
-        setCustomers(customers.map(c => c.id === editingCustomerId ? updatedCustomer : c))
-        setToast({ message: 'Müştəri uğurla yeniləndi', type: 'success' })
-      } else {
-        // Yeni müştəri - Create
-        const createdCustomer = await customersAPI.create({
-          code: newCustomer.code.trim() || null,
-          name: newCustomer.name.trim(),
-          phone: newCustomer.phone.trim() || null,
-          email: newCustomer.email.trim() || null,
-          address: newCustomer.address.trim() || null,
-          balance: 0, // Default balans 0
-          folder_id: newCustomer.folder_id,
-          is_active: isActive,
-        })
-
-        // Customers state-ə əlavə et
-        setCustomers([...customers, createdCustomer])
-        setToast({ 
-          message: isActive 
-            ? 'Müştəri uğurla yaradıldı və aktiv edildi' 
-            : 'Müştəri uğurla yaradıldı (passiv)', 
-          type: 'success' 
-        })
-      }
-
-      // Modalı bağla və formu təmizlə
-      setAddCustomerModalOpen(false)
-      setEditingCustomerId(null)
-      setNewCustomer({
-        code: '',
-        name: '',
-        phone: '',
-        email: '',
-        address: '',
-        folder_id: selectedFolder, // Seçilmiş papkanı default olaraq saxla
-      })
-    } catch (error: any) {
-      console.error('Müştəri saxlanarkən xəta:', error)
-      setToast({ 
-        message: error.response?.data?.message || (editingCustomerId ? 'Müştəri yenilənərkən xəta baş verdi' : 'Müştəri yaradılarkən xəta baş verdi'), 
-        type: 'error' 
-      })
-    }
+  const handleSaveCustomer = async (_isActive: boolean = false) => {
+    // Satıcılar üçün create/update endpoint-ləri hazır olmadığı üçün bu funksiya deaktivdir
+    setToast({
+      message: 'Satıcılar üçün əlavə / redaktə funksiyası hələ aktiv deyil',
+      type: 'info',
+    })
   }
 
   const handleEditFolder = async (folderId: number) => {
@@ -995,43 +922,17 @@ export default function Alicilar() {
     setToast({ message: 'Köçürmə ləğv edildi', type: 'info' })
   }
 
-  const handleMoveToFolder = async (folderId: number | null) => {
+  const handleMoveToFolder = async (_folderId: number | null) => {
     if (selectedIds.size === 0) {
-      setToast({ message: 'Zəhmət olmasa köçürmək üçün müştəri seçin', type: 'info' })
+      setToast({ message: 'Zəhmət olmasa köçürmək üçün satıcı seçin', type: 'info' })
       return
     }
 
-    const folderName = folderId === null 
-      ? 'Bütün alıcılar (papkasız)' 
-      : folders.find(f => f.id === folderId)?.name || 'Naməlum papka'
-
-    try {
-      const customerIds = Array.from(selectedIds)
-      await customersAPI.moveToFolder(customerIds, folderId)
-      
-      // Müştəriləri yenilə
-      await loadCustomers()
-      
-      // Papkaları yenilə (customer_count dəyişə bilər)
-      await loadFolders()
-      
-      // Seçimləri təmizlə
-      setSelectedIds(new Set())
-      
-      // Köçürmə rejimini söndür
-      setMoveMode(false)
-      
-      setToast({ 
-        message: `${customerIds.length} müştəri "${folderName}" papkasına köçürüldü`, 
-        type: 'success' 
-      })
-    } catch (error: any) {
-      console.error('Müştərilər köçürülərkən xəta:', error)
-      setToast({ 
-        message: error.response?.data?.message || 'Müştərilər köçürülərkən xəta baş verdi', 
-        type: 'error' 
-      })
-    }
+    // Satıcılar üçün papka strukturu nəzərdə tutulmadığı üçün bu funksiya deaktivdir
+    setToast({
+      message: 'Satıcılar üçün papkalara köçürmə funksiyası mövcud deyil',
+      type: 'info',
+    })
   }
 
   // Ağac strukturunu qur
