@@ -29,9 +29,9 @@ export default function Toast({ message, type = 'info', onClose, duration = 3000
       onClick={onClose}
       style={{
         position: 'fixed',
-        top: '20px',
         left: '50%',
         transform: 'translateX(-50%)',
+        bottom: '20px', // Alt ekrandan bir az yuxarı
         background: color.bg,
         color: 'white',
         padding: '0.75rem 1.5rem',
@@ -45,16 +45,16 @@ export default function Toast({ message, type = 'info', onClose, duration = 3000
         fontWeight: '500',
         maxWidth: '90%',
         cursor: 'pointer',
-        animation: 'slideDown 0.3s ease-out',
+        animation: 'slideUpToast 0.3s ease-out',
       }}
     >
       <span style={{ fontSize: '1.25rem' }}>{color.icon}</span>
       <span>{message}</span>
       <style>{`
-        @keyframes slideDown {
+        @keyframes slideUpToast {
           from {
             opacity: 0;
-            transform: translateX(-50%) translateY(-20px);
+            transform: translateX(-50%) translateY(20px);
           }
           to {
             opacity: 1;

@@ -73,8 +73,15 @@ export default function Alicilar() {
     return saved === 'true' ? true : false
   }) // Papka ağacının görünürlüyü
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; folderId: number | null } | null>(null) // Kontekst menyu
-  const [debugMode] = useState(true) // Debug mode - border və ölçüləri göstərmək üçün (rəngli çərçivələr aktiv)
+  const [debugMode] = useState(false) // Debug mode - defolt olaraq gizlidir
   const [isMobile, setIsMobile] = useState(false) // Mobil cihaz yoxlaması
+  const [rowsPerPage, setRowsPerPage] = useState(() => {
+    const saved = localStorage.getItem('customerTableRowsPerPage')
+    const parsed = saved ? parseInt(saved, 10) : 10
+    if (!Number.isFinite(parsed)) return 10
+    return Math.min(Math.max(parsed, 5), 50) // 5-50 arası
+  })
+  const [rowsPerPageInput, setRowsPerPageInput] = useState<string>(() => String(rowsPerPage))
   
   // Ekran ölçüsünü yoxla
   useEffect(() => {
@@ -89,12 +96,14 @@ export default function Alicilar() {
   // Sütun konfiqurasiyası
   const [columnOrder, setColumnOrder] = useState<string[]>(() => {
     const saved = localStorage.getItem('customerTableColumnOrder')
-    return saved ? JSON.parse(saved) : ['checkbox', 'code', 'name', 'phone', 'folder', 'balance']
+    // Yeni "rowNumber" sütununu default olaraq checkbox-dan sonra əlavə edək
+    return saved ? JSON.parse(saved) : ['checkbox', 'rowNumber', 'code', 'name', 'phone', 'folder', 'balance']
   })
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
     const saved = localStorage.getItem('customerTableColumnWidths')
     return saved ? JSON.parse(saved) : {
       checkbox: 50,
+      rowNumber: 70,
       code: 120,
       name: 200,
       phone: 150,
@@ -455,7 +464,8 @@ export default function Alicilar() {
 
   // Sütun konfiqurasiyası
   const columnConfig: Record<string, { label: string; align?: 'left' | 'right' | 'center'; render?: (customer: Customer) => React.ReactNode }> = {
-    checkbox: { label: '№', align: 'center' },
+    checkbox: { label: '', align: 'center' },
+    rowNumber: { label: '№', align: 'center' },
     code: { label: 'Kod', align: 'left' },
     name: { label: 'Ad', align: 'left' },
     phone: { label: 'Telefon', align: 'left' },
@@ -470,9 +480,10 @@ export default function Alicilar() {
 
   // Varsayılanlara qaytar
   const handleResetToDefaults = () => {
-    const defaultOrder = ['checkbox', 'code', 'name', 'phone', 'folder', 'balance']
+    const defaultOrder = ['checkbox', 'rowNumber', 'code', 'name', 'phone', 'folder', 'balance']
     const defaultWidths = {
       checkbox: 50,
+      rowNumber: 70,
       code: 120,
       name: 200,
       phone: 150,
@@ -481,6 +492,7 @@ export default function Alicilar() {
     }
     const defaultVisibility = {
       checkbox: true,
+      rowNumber: true,
       code: true,
       name: true,
       phone: true,
@@ -650,10 +662,36 @@ export default function Alicilar() {
   }
 
   const handleCopy = () => {
-    // TODO: Kopyala
-    if (selectedIds.size > 0) {
-      console.log('Kopyala:', Array.from(selectedIds))
+    // Yalnız bir müştərini kopyalamağa icazə ver
+    if (selectedIds.size === 0) {
+      setToast({ message: 'Zəhmət olmasa kopyalamaq üçün bir müştəri seçin', type: 'info' })
+      return
     }
+    if (selectedIds.size > 1) {
+      setToast({ message: 'Kopyalamaq üçün yalnız bir müştəri seçə bilərsiniz', type: 'info' })
+      return
+    }
+
+    const customerId = Array.from(selectedIds)[0]
+    const original = customers.find(c => c.id === customerId)
+
+    if (!original) {
+      setToast({ message: 'Müştəri tapılmadı', type: 'error' })
+      return
+    }
+
+    // Redaktə rejimi deyil, yeni müştəri kimi aç (kod boş olsun)
+    setEditingCustomerId(null)
+    setNewCustomer({
+      code: '', // Kod boş – backend yeni kod generasiya edə bilər
+      name: original.name || '',
+      phone: original.phone || '',
+      email: original.email || '',
+      address: original.address || '',
+      folder_id: original.folder_id ?? selectedFolder ?? null,
+    })
+    setAddCustomerModalOpen(true)
+    setToast({ message: 'Müştəri kopyalandı, yeni kodla yadda saxlaya bilərsiniz', type: 'info' })
   }
 
   const handleRefresh = () => {
@@ -1517,7 +1555,7 @@ export default function Alicilar() {
 
   // Sort funksiyası
   const handleSort = (columnKey: string) => {
-    if (columnKey === 'checkbox') return // Checkbox sütununu sort etmə
+    if (columnKey === 'checkbox' || columnKey === 'rowNumber') return // Checkbox və sıra sütununu sort etmə
     
     setSortConfig(prev => {
       if (prev?.key === columnKey) {
@@ -1600,6 +1638,29 @@ export default function Alicilar() {
   
   const filteredCustomers = getSortedCustomers(filteredBySearch)
 
+  // Ekran ölçüsünə görə dinamik görünən sətir sayı
+  const DEFAULT_ROW_HEIGHT = isMobile ? 44 : 40
+  const tableBodyMaxHeightPx = DEFAULT_ROW_HEIGHT * rowsPerPage
+
+  // Aşağı summary üçün statistikalar
+  const totalVisibleCount = filteredCustomers.length
+  const totalVisibleBalance = filteredCustomers.reduce((sum, c) => {
+    const value = c.balance !== null && c.balance !== undefined ? Number(c.balance) : 0
+    return sum + (isNaN(value) ? 0 : value)
+  }, 0)
+  const totalSelectedCount = selectedIds.size
+  const totalSelectedBalance = customers.reduce((sum, c) => {
+    if (!selectedIds.has(c.id)) return sum
+    const value = c.balance !== null && c.balance !== undefined ? Number(c.balance) : 0
+    return sum + (isNaN(value) ? 0 : value)
+  }, 0)
+
+  // rowsPerPage dəyərini localStorage-a yaz
+  useEffect(() => {
+    localStorage.setItem('customerTableRowsPerPage', String(rowsPerPage))
+    setRowsPerPageInput(String(rowsPerPage))
+  }, [rowsPerPage])
+
   // Seçilmiş papkadakı müştərilərin sayını hesabla
   const getCustomerCountForFolder = (folderId: number | null) => {
     if (folderId === null) {
@@ -1646,7 +1707,7 @@ export default function Alicilar() {
 
   // Layout sabitləri - navbar, toolbar və cədvəl arasındakı boşluqlar
   const NAVBAR_HEIGHT = 56
-  const NAVBAR_TOOLBAR_GAP = 8   // Navbar ilə toolbar arasındakı boşluq bir az artsın
+  const NAVBAR_TOOLBAR_GAP = 20  // Navbar ilə toolbar arasındakı boşluq
   const TOOLBAR_TABLE_GAP = 0    // Toolbar ilə cədvəl başlığı arasında əlavə boşluq olmasın
 
   const toolbarTop = NAVBAR_HEIGHT + NAVBAR_TOOLBAR_GAP
@@ -1687,8 +1748,28 @@ export default function Alicilar() {
             zIndex: 999,
             scrollbarWidth: 'thin',
             boxShadow: '0 1px 3px rgba(15, 23, 42, 0.06)',
+            border: debugMode ? '2px solid red' : 'none', // DEBUG
+            boxSizing: 'border-box',
           }}
         >
+          {debugMode && (
+            <span
+              style={{
+                position: 'absolute',
+                top: 2,
+                left: 2,
+                background: 'red',
+                color: 'white',
+                fontSize: 10,
+                padding: '1px 3px',
+                borderRadius: 2,
+                zIndex: 1000,
+                fontWeight: 'bold',
+              }}
+            >
+              TOOLBAR
+            </span>
+          )}
           <button
             onClick={handleAdd}
             style={{
@@ -2035,19 +2116,68 @@ export default function Alicilar() {
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: '0.5rem',
+              border: debugMode ? '2px solid purple' : 'none', // DEBUG
+              boxSizing: 'border-box',
             }}
           >
+            {debugMode && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 2,
+                  left: 2,
+                  background: 'purple',
+                  color: 'white',
+                  fontSize: 10,
+                  padding: '1px 3px',
+                  borderRadius: 2,
+                  zIndex: 1000,
+                  fontWeight: 'bold',
+                }}
+              >
+                FOLDER PANEL
+              </span>
+            )}
             <div style={{ fontSize: '0.85rem', color: '#333', overflowX: 'auto', whiteSpace: 'nowrap' }}>
               {folderPath.map((item, index) => (
                 <span key={item.id || 'root'}>
                   {index > 0 && <span style={{ color: '#999', margin: '0 0.25rem' }}>›</span>}
+                  {/* Root üçün (Bütün alıcılar) papka ağacı gizlidirsə, yalnız üçbucağa basanda aç */}
+                  {index === 0 && !folderTreeVisible && (
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setFolderTreeVisible(true)
+                        localStorage.setItem('folderTreeVisible', 'true')
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '3px',
+                        border: '1px solid #1976d2',
+                        marginRight: '0.4rem',
+                        cursor: 'pointer',
+                        color: '#1976d2',
+                        fontSize: '0.8rem',
+                        background: '#e3f2fd',
+                      }}
+                    >
+                      ▶
+                    </span>
+                  )}
                   <span
                     style={{
                       cursor: 'pointer',
                       color: index === folderPath.length - 1 ? '#1976d2' : '#666',
                       fontWeight: index === folderPath.length - 1 ? 'bold' : 'normal',
+                      display: 'inline-flex',
+                      alignItems: 'center',
                     }}
                     onClick={() => {
+                      // Yalnız mətni klikləyəndə papkanı seç (ağacı açmadan)
                       setSelectedFolder(item.id)
                       setSelectedIds(new Set())
                     }}
@@ -2829,6 +2959,7 @@ export default function Alicilar() {
                   display: 'flex',
                   flexDirection: 'column',
                   WebkitOverflowScrolling: 'touch',
+                  paddingBottom: isMobile ? 8 : 8, // Alt hissədə minimal boşluq
                 }}
               >
                 {/* Müştərilər cədvəli və ya boş mesaj */}
@@ -3037,11 +3168,13 @@ export default function Alicilar() {
                 <div 
                   ref={tableBodyScrollRef}
                   style={{ 
-                  minHeight: 0,
-                  overflowX: 'auto',
-                  overflowY: 'auto',
-                  flex: 1,
-                }}>
+                    minHeight: 0,
+                    overflowX: 'auto',
+                    // Yalnız cədvəl gövdəsi yuxarı-aşağı scroll olsun, sabit çərçivə hündürlüyü ilə
+                    overflowY: 'auto',
+                    maxHeight: `${tableBodyMaxHeightPx}px`,
+                    flex: 1,
+                  }}>
                 <table
                   style={{
                     width: 'max-content',
@@ -3114,7 +3247,8 @@ export default function Alicilar() {
                             if (!columnVisibility[columnKey]) return null
 
                             const isCheckbox = columnKey === 'checkbox'
-                            const width = columnWidths[columnKey] || (isCheckbox ? 50 : 100)
+                            const isRowNumber = columnKey === 'rowNumber'
+                            const width = columnWidths[columnKey] || (isCheckbox || isRowNumber ? 70 : 100)
 
                             let cellContent: React.ReactNode
                             let cellStyle: React.CSSProperties = {
@@ -3164,6 +3298,8 @@ export default function Alicilar() {
                                   }}
                                 />
                               )
+                            } else if (isRowNumber) {
+                              cellContent = filteredCustomers.indexOf(customer) + 1
                             } else if (columnKey === 'code') {
                               cellStyle.color = '#666'
                               cellStyle.fontFamily = 'monospace'
@@ -3218,6 +3354,40 @@ export default function Alicilar() {
                     })}
                   </tbody>
                 </table>
+                </div>
+                {/* Cədvəl summary footeri */}
+                <div
+                  style={{
+                    flexShrink: 0,
+                    marginTop: 0,
+                    borderTop: '1px solid #e0e0e0',
+                    background: '#fafafa',
+                    padding: '0.5rem 0.75rem',
+                    fontSize: '0.8rem',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: '1rem',
+                    color: '#333',
+                  }}
+                >
+                  <div>
+                    <strong>Sıra sayı:</strong>{' '}
+                    {totalSelectedCount > 0
+                      ? `${totalSelectedCount} seçildi / ${totalVisibleCount} cəmi`
+                      : `${totalVisibleCount} sətir`}
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div>
+                      <strong>Görünən balans cəmi:</strong>{' '}
+                      {totalVisibleBalance.toFixed(2)} ₼
+                    </div>
+                    {totalSelectedCount > 0 && (
+                      <div>
+                        <strong>Seçilən balans cəmi:</strong>{' '}
+                        {totalSelectedBalance.toFixed(2)} ₼
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -3362,7 +3532,10 @@ export default function Alicilar() {
             left: 0,
             right: 0,
             bottom: isMobile ? '60px' : 0, // Mobil üçün bottom navbar hündürlüyü
-            background: 'rgba(0, 0, 0, 0.5)',
+            background: 'rgba(0, 0, 0, 0.35)',
+            // Altdakı səhifəni bulanıq göstərmək üçün
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
             zIndex: 10000,
             display: 'flex',
             alignItems: isMobile ? 'stretch' : 'center',
@@ -4042,6 +4215,61 @@ export default function Alicilar() {
                         <div style={{ fontSize: '0.75rem', color: '#666' }}>Papkalar alt-alta accordion kimi göstərilir</div>
                       </div>
                     </label>
+                  </div>
+
+                  <h3 style={{ fontSize: '1rem', fontWeight: 'bold', margin: '1.5rem 0 0.75rem' }}>
+                    Cədvəldə görünən sətir sayı
+                  </h3>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      padding: '0.75rem',
+                      borderRadius: '6px',
+                      border: '2px solid #e0e0e0',
+                      background: 'white',
+                    }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 'bold', marginBottom: '0.25rem', fontSize: '0.9rem' }}>
+                        Görünən sətir sayı
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#666' }}>
+                        Telefon ekranına uyğun neçə sətir görmək istəyirsənsə, bu dəyəri dəyiş.
+                        Minimum 5, maksimum 50 sətir.
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                      <input
+                        type="number"
+                        value={rowsPerPageInput}
+                        min={5}
+                        max={50}
+                        onChange={(e) => {
+                          // İstifadəçi sərbəst yazsın deyə əvvəlcə sadəcə string-i saxlayırıq
+                          setRowsPerPageInput(e.target.value)
+                        }}
+                        onBlur={() => {
+                          const raw = parseInt(rowsPerPageInput || '0', 10)
+                          if (!Number.isFinite(raw)) {
+                            setRowsPerPage(10)
+                            return
+                          }
+                          const clamped = Math.min(Math.max(raw, 5), 50)
+                          setRowsPerPage(clamped)
+                        }}
+                        style={{
+                          width: '64px',
+                          padding: '0.35rem 0.5rem',
+                          border: '1px solid #e0e0e0',
+                          borderRadius: '4px',
+                          fontSize: '0.9rem',
+                          textAlign: 'center',
+                        }}
+                      />
+                      <span style={{ fontSize: '0.85rem', color: '#666' }}>sətir</span>
+                    </div>
                   </div>
                 </div>
               )}
