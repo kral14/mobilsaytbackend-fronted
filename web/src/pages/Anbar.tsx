@@ -859,7 +859,6 @@ export default function Anbar() {
             <tbody>
               ${productsToPrint.map(product => {
                 const quantity = getWarehouseQuantity(product)
-                const salePrice = parseFloat(product.sale_price?.toString() || '0')
                 const qty = parseFloat(quantity.toString())
                 
                 return `
