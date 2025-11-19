@@ -1,11 +1,29 @@
 import { Router } from 'express'
-import { getAllSuppliers } from '../controllers/supplierController'
+import {
+  getAllSuppliers,
+  createSupplier,
+  updateSupplier,
+  deleteSupplier,
+  moveSuppliersToFolder,
+} from '../controllers/supplierController'
 import { authMiddleware } from '../middleware/auth'
 
 const router = Router()
 
-// Təchizatçıları görüntüləmək üçün auth lazımdır
+// Satıcıları görüntüləmək üçün auth lazımdır
 router.get('/', authMiddleware, getAllSuppliers)
+
+// Yeni satıcı yarat
+router.post('/', authMiddleware, createSupplier)
+
+// Satıcı yenilə
+router.put('/:id', authMiddleware, updateSupplier)
+
+// Satıcı sil
+router.delete('/:id', authMiddleware, deleteSupplier)
+
+// Satıcıları papkaya köçür
+router.post('/move-to-folder', authMiddleware, moveSuppliersToFolder)
 
 export default router
 

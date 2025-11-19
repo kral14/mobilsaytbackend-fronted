@@ -12,6 +12,20 @@ interface Folder {
   customer_count?: number
 }
 
+const mapSupplierToCustomer = (s: Supplier): Customer => ({
+  id: s.id,
+  code: s.code || null,
+  name: s.name,
+  phone: s.phone,
+  email: s.email,
+  address: s.address,
+  balance: s.balance,
+  folder_id: s.folder_id ?? null,
+  is_active: null,
+  created_at: s.created_at,
+  updated_at: s.updated_at,
+})
+
 export default function Saticilar() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(false)
@@ -541,19 +555,7 @@ export default function Saticilar() {
       setLoading(true)
       const suppliers = await suppliersAPI.getAll()
       // Satıcıları mövcud cədvəl strukturu üçün müştəri obyektinə map edək
-      const mappedCustomers: Customer[] = suppliers.map((s: Supplier) => ({
-        id: s.id,
-        code: null,
-        name: s.name,
-        phone: s.phone,
-        email: s.email,
-        address: s.address,
-        balance: s.balance,
-        folder_id: null,
-        is_active: null,
-        created_at: s.created_at,
-        updated_at: s.updated_at,
-      }))
+      const mappedCustomers: Customer[] = suppliers.map((s: Supplier) => mapSupplierToCustomer(s))
       setCustomers(mappedCustomers)
     } catch (error: any) {
       console.error('Satıcılar yüklənərkən xəta:', error)
@@ -609,7 +611,7 @@ export default function Saticilar() {
 
   const handleEdit = () => {
     if (selectedIds.size !== 1) {
-      setToast({ message: 'Zəhmət olmasa redaktə etmək üçün bir müştəri seçin', type: 'info' })
+      setToast({ message: 'Zəhmət olmasa redaktə etmək üçün bir satıcı seçin', type: 'info' })
       return
     }
 
@@ -617,7 +619,7 @@ export default function Saticilar() {
     const customer = customers.find(c => c.id === customerId)
     
     if (!customer) {
-      setToast({ message: 'Müştəri tapılmadı', type: 'error' })
+      setToast({ message: 'Satıcı tapılmadı', type: 'error' })
       return
     }
 
@@ -640,21 +642,48 @@ export default function Saticilar() {
       return
     }
 
-    // Satıcılar üçün silmə funksiyası hələ backend-də yoxdur
-    setToast({
-      message: 'Satıcıları silmək funksiyası hələ aktiv deyil',
-      type: 'info',
-    })
+    const confirmMessage = selectedIds.size === 1
+      ? 'Bu satıcıyı silmək istədiyinizə əminsiniz?'
+      : `${selectedIds.size} satıcını silmək istədiyinizə əminsiniz?`
+
+    if (!window.confirm(confirmMessage)) {
+      return
+    }
+
+    try {
+      const selectedCount = selectedIds.size
+      const selectedIdsArray = Array.from(selectedIds)
+
+      const deletePromises = selectedIdsArray.map(id =>
+        suppliersAPI.delete(String(id))
+      )
+
+      await Promise.all(deletePromises)
+
+      setCustomers(customers.filter(c => !selectedIds.has(c.id)))
+      setSelectedIds(new Set())
+
+      setToast({
+        message: `${selectedCount} satıcı uğurla silindi`,
+        type: 'success',
+      })
+    } catch (error: any) {
+      console.error('Satıcı silinərkən xəta:', error)
+      setToast({
+        message: error.response?.data?.message || 'Satıcı silinərkən xəta baş verdi',
+        type: 'error',
+      })
+    }
   }
 
   const handleCopy = () => {
-    // Yalnız bir müştərini kopyalamağa icazə ver
+    // Yalnız bir satıcını kopyalamağa icazə ver
     if (selectedIds.size === 0) {
-      setToast({ message: 'Zəhmət olmasa kopyalamaq üçün bir müştəri seçin', type: 'info' })
+      setToast({ message: 'Zəhmət olmasa kopyalamaq üçün bir satıcı seçin', type: 'info' })
       return
     }
     if (selectedIds.size > 1) {
-      setToast({ message: 'Kopyalamaq üçün yalnız bir müştəri seçə bilərsiniz', type: 'info' })
+      setToast({ message: 'Kopyalamaq üçün yalnız bir satıcı seçə bilərsiniz', type: 'info' })
       return
     }
 
@@ -662,11 +691,11 @@ export default function Saticilar() {
     const original = customers.find(c => c.id === customerId)
 
     if (!original) {
-      setToast({ message: 'Müştəri tapılmadı', type: 'error' })
+      setToast({ message: 'Satıcı tapılmadı', type: 'error' })
       return
     }
 
-    // Redaktə rejimi deyil, yeni müştəri kimi aç (kod boş olsun)
+    // Redaktə rejimi deyil, yeni satıcı kimi aç (kod boş olsun)
     setEditingCustomerId(null)
     setNewCustomer({
       code: '', // Kod boş – backend yeni kod generasiya edə bilər
@@ -677,7 +706,7 @@ export default function Saticilar() {
       folder_id: original.folder_id ?? selectedFolder ?? null,
     })
     setAddCustomerModalOpen(true)
-    setToast({ message: 'Müştəri kopyalandı, yeni kodla yadda saxlaya bilərsiniz', type: 'info' })
+    setToast({ message: 'Satıcı kopyalandı, yeni məlumatlarla yadda saxlaya bilərsiniz', type: 'info' })
   }
 
   const handleRefresh = () => {
@@ -777,11 +806,64 @@ export default function Saticilar() {
   }
 
   const handleSaveCustomer = async (_isActive: boolean = false) => {
-    // Satıcılar üçün create/update endpoint-ləri hazır olmadığı üçün bu funksiya deaktivdir
-    setToast({
-      message: 'Satıcılar üçün əlavə / redaktə funksiyası hələ aktiv deyil',
-      type: 'info',
-    })
+    if (!newCustomer.name.trim()) {
+      setToast({ message: 'Satıcı adı məcburidir', type: 'error' })
+      return
+    }
+
+    try {
+      if (editingCustomerId !== null) {
+        // Satıcı yenilə
+        const updatedSupplier = await suppliersAPI.update(String(editingCustomerId), {
+          name: newCustomer.name.trim(),
+          phone: newCustomer.phone.trim() || null,
+          email: newCustomer.email.trim() || null,
+          address: newCustomer.address.trim() || null,
+          folder_id: newCustomer.folder_id,
+        })
+
+        const updatedCustomer = mapSupplierToCustomer(updatedSupplier)
+        setCustomers(customers.map(c => c.id === editingCustomerId ? updatedCustomer : c))
+        setToast({ message: 'Satıcı uğurla yeniləndi', type: 'success' })
+      } else {
+        // Yeni satıcı yarat
+        const createdSupplier = await suppliersAPI.create({
+          name: newCustomer.name.trim(),
+          phone: newCustomer.phone.trim() || null,
+          email: newCustomer.email.trim() || null,
+          address: newCustomer.address.trim() || null,
+          balance: 0,
+          folder_id: newCustomer.folder_id,
+        })
+
+        const createdCustomer = mapSupplierToCustomer(createdSupplier)
+        setCustomers([...customers, createdCustomer])
+        setToast({
+          message: 'Satıcı uğurla yaradıldı',
+          type: 'success',
+        })
+      }
+
+      // Modalı bağla və formu təmizlə
+      setAddCustomerModalOpen(false)
+      setEditingCustomerId(null)
+      setNewCustomer({
+        code: '',
+        name: '',
+        phone: '',
+        email: '',
+        address: '',
+        folder_id: selectedFolder,
+      })
+    } catch (error: any) {
+      console.error('Satıcı saxlanarkən xəta:', error)
+      setToast({
+        message:
+          error.response?.data?.message ||
+          (editingCustomerId ? 'Satıcı yenilənərkən xəta baş verdi' : 'Satıcı yaradılarkən xəta baş verdi'),
+        type: 'error',
+      })
+    }
   }
 
   const handleEditFolder = async (folderId: number) => {
@@ -922,17 +1004,38 @@ export default function Saticilar() {
     setToast({ message: 'Köçürmə ləğv edildi', type: 'info' })
   }
 
-  const handleMoveToFolder = async (_folderId: number | null) => {
+  const handleMoveToFolder = async (folderId: number | null) => {
     if (selectedIds.size === 0) {
       setToast({ message: 'Zəhmət olmasa köçürmək üçün satıcı seçin', type: 'info' })
       return
     }
 
-    // Satıcılar üçün papka strukturu nəzərdə tutulmadığı üçün bu funksiya deaktivdir
-    setToast({
-      message: 'Satıcılar üçün papkalara köçürmə funksiyası mövcud deyil',
-      type: 'info',
-    })
+    const folderName = folderId === null
+      ? 'Bütün satıcılar (papkasız)'
+      : folders.find(f => f.id === folderId)?.name || 'Naməlum papka'
+
+    try {
+      const supplierIds = Array.from(selectedIds)
+      await suppliersAPI.moveToFolder(supplierIds, folderId)
+
+      // Satıcıları və papkaları yenilə
+      await loadCustomers()
+      await loadFolders()
+
+      setSelectedIds(new Set())
+      setMoveMode(false)
+
+      setToast({
+        message: `${supplierIds.length} satıcı "${folderName}" papkasına köçürüldü`,
+        type: 'success',
+      })
+    } catch (error: any) {
+      console.error('Satıcılar köçürülərkən xəta:', error)
+      setToast({
+        message: error.response?.data?.message || 'Satıcılar köçürülərkən xəta baş verdi',
+        type: 'error',
+      })
+    }
   }
 
   // Ağac strukturunu qur
@@ -3465,7 +3568,7 @@ export default function Saticilar() {
             }}
           >
             <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1rem' }}>
-              {editingCustomerId !== null ? 'Alıcını redaktə et' : 'Yeni alıcı əlavə et'}
+              {editingCustomerId !== null ? 'Satıcını redaktə et' : 'Yeni satıcı əlavə et'}
             </h2>
             
             <div style={{ marginBottom: '1rem' }}>

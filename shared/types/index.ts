@@ -128,6 +128,7 @@ export interface CreateOrderRequest {
 
 export interface Supplier {
   id: number
+  code?: string | null
   name: string
   phone: string | null
   email: string | null

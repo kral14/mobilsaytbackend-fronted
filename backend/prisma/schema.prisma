@@ -130,6 +130,7 @@ model sale_invoices {
 
 model suppliers {
   id                Int                 @id @default(autoincrement())
+  code              String?             @db.VarChar(50)
   name              String              @db.VarChar(255)
   phone             String?             @db.VarChar(50)
   email             String?             @db.VarChar(255)

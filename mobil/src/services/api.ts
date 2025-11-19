@@ -270,10 +270,49 @@ export const supplierFoldersAPI = {
   },
 }
 
-// Suppliers API (Satıcılar siyahısı)
+// Suppliers API (Satıcılar)
 export const suppliersAPI = {
   getAll: async (): Promise<Supplier[]> => {
     const response = await api.get<Supplier[]>('/suppliers')
+    return response.data
+  },
+
+  create: async (data: {
+    name: string
+    phone?: string | null
+    email?: string | null
+    address?: string | null
+    balance?: number | null
+    folder_id?: number | null
+  }): Promise<Supplier> => {
+    const response = await api.post<Supplier>('/suppliers', data)
+    return response.data
+  },
+
+  update: async (
+    id: string,
+    data: {
+      name?: string
+      phone?: string | null
+      email?: string | null
+      address?: string | null
+      balance?: number | null
+      folder_id?: number | null
+    },
+  ): Promise<Supplier> => {
+    const response = await api.put<Supplier>(`/suppliers/${id}`, data)
+    return response.data
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/suppliers/${id}`)
+  },
+
+  moveToFolder: async (supplier_ids: number[], folder_id: number | null): Promise<{ message: string; count: number }> => {
+    const response = await api.post<{ message: string; count: number }>('/suppliers/move-to-folder', {
+      supplier_ids,
+      folder_id,
+    })
     return response.data
   },
 }
