@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Layout from '../../components/Layout'
 import Toast from '../../components/Toast'
-import { customerFoldersAPI, suppliersAPI } from '../../services/api'
+import { supplierFoldersAPI, suppliersAPI } from '../../services/api'
 import type { Customer, Supplier } from '@shared/types'
 
 interface Folder {
@@ -52,7 +52,8 @@ export default function Saticilar() {
     return saved !== null ? saved === 'true' : true
   })
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>(() => {
-    const saved = localStorage.getItem('customerTableColumnVisibility')
+    // Satıcılar üçün sütun görünürlüğü ayrıca saxlanılır
+    const saved = localStorage.getItem('supplierTableColumnVisibility')
     return saved ? JSON.parse(saved) : {
       checkbox: true,
       code: true,
@@ -63,20 +64,20 @@ export default function Saticilar() {
     }
   })
   const [folderViewMode, setFolderViewMode] = useState<'sidebar' | 'accordion'>(() => {
-    // localStorage-dan oxu
-    const saved = localStorage.getItem('folderViewMode')
+    // Satıcılar üçün ayrıca localStorage açarı
+    const saved = localStorage.getItem('supplierFolderViewMode')
     return (saved === 'sidebar' || saved === 'accordion') ? saved : 'sidebar'
   }) // Papka görünüş rejimi
   const [folderTreeVisible, setFolderTreeVisible] = useState(() => {
-    // localStorage-dan oxu, yoxdursa false (gizli)
-    const saved = localStorage.getItem('folderTreeVisible')
-    return saved === 'true' ? true : false
+    // Satıcılar üçün ayrıca localStorage açarı
+    const saved = localStorage.getItem('supplierFolderTreeVisible')
+    return saved === 'true'
   }) // Papka ağacının görünürlüyü
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; folderId: number | null } | null>(null) // Kontekst menyu
   const [debugMode] = useState(false) // Debug mode - defolt olaraq gizlidir
   const [isMobile, setIsMobile] = useState(false) // Mobil cihaz yoxlaması
   const [rowsPerPage, setRowsPerPage] = useState(() => {
-    const saved = localStorage.getItem('customerTableRowsPerPage')
+    const saved = localStorage.getItem('supplierTableRowsPerPage')
     const parsed = saved ? parseInt(saved, 10) : 10
     if (!Number.isFinite(parsed)) return 10
     return Math.min(Math.max(parsed, 5), 50) // 5-50 arası
@@ -95,12 +96,12 @@ export default function Saticilar() {
   
   // Sütun konfiqurasiyası
   const [columnOrder, setColumnOrder] = useState<string[]>(() => {
-    const saved = localStorage.getItem('customerTableColumnOrder')
+    const saved = localStorage.getItem('supplierTableColumnOrder')
     // Yeni "rowNumber" sütununu default olaraq checkbox-dan sonra əlavə edək
     return saved ? JSON.parse(saved) : ['checkbox', 'rowNumber', 'code', 'name', 'phone', 'folder', 'balance']
   })
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
-    const saved = localStorage.getItem('customerTableColumnWidths')
+    const saved = localStorage.getItem('supplierTableColumnWidths')
     return saved ? JSON.parse(saved) : {
       checkbox: 50,
       rowNumber: 70,
@@ -112,7 +113,7 @@ export default function Saticilar() {
     }
   })
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(() => {
-    const saved = localStorage.getItem('customerTableSortConfig')
+    const saved = localStorage.getItem('supplierTableSortConfig')
     return saved ? JSON.parse(saved) : null
   })
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null)
@@ -196,11 +197,11 @@ export default function Saticilar() {
 
   // Sütun konfiqurasiyasını localStorage-a yaz
   useEffect(() => {
-    localStorage.setItem('customerTableColumnOrder', JSON.stringify(columnOrder))
+    localStorage.setItem('supplierTableColumnOrder', JSON.stringify(columnOrder))
   }, [columnOrder])
 
   useEffect(() => {
-    localStorage.setItem('customerTableColumnWidths', JSON.stringify(columnWidths))
+    localStorage.setItem('supplierTableColumnWidths', JSON.stringify(columnWidths))
   }, [columnWidths])
 
   // Touch event-ləri üçün non-passive listener-lar əlavə et
@@ -525,11 +526,10 @@ export default function Saticilar() {
 
   const loadFolders = async () => {
     try {
-      const data = await customerFoldersAPI.getAll()
+      const data = await supplierFoldersAPI.getAll()
       setFolders(data)
     } catch (error: any) {
-      console.error('Papkalar yüklənərkən xəta:', error)
-      // Network error varsa, backend server işləmir
+      console.error('Satıcı papkaları yüklənərkən xəta:', error)
       if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
         console.warn('Backend server işləmir. Zəhmət olmasa backend-i başlatın.')
       }
@@ -749,8 +749,8 @@ export default function Saticilar() {
     }
 
     try {
-      // API-yə göndər
-      const newFolder = await customerFoldersAPI.create({
+      // Satıcı papkası API-yə göndər
+      const newFolder = await supplierFoldersAPI.create({
         name: newFolderName.trim(),
         parent_id: selectedFolder,
       })
@@ -792,7 +792,7 @@ export default function Saticilar() {
     if (!newName || !newName.trim()) return
 
     try {
-      const updatedFolder = await customerFoldersAPI.update(String(folderId), {
+      const updatedFolder = await supplierFoldersAPI.update(String(folderId), {
         name: newName.trim(),
         parent_id: folder.parent_id,
       })
@@ -812,7 +812,7 @@ export default function Saticilar() {
     if (!confirm('Bu papkanı silmək istədiyinizə əminsiniz?')) return
 
     try {
-      await customerFoldersAPI.delete(String(folderId))
+      await supplierFoldersAPI.delete(String(folderId))
       setFolders(folders.filter(f => f.id !== folderId))
       if (selectedFolder === folderId) {
         setSelectedFolder(null)
@@ -873,11 +873,11 @@ export default function Saticilar() {
     if (!folder) return
 
     const targetFolderName = targetFolderId === null 
-      ? 'Bütün alıcılar (root)' 
+      ? 'Bütün satıcılar (root)' 
       : folders.find(f => f.id === targetFolderId)?.name || 'Naməlum papka'
 
     try {
-      await customerFoldersAPI.update(String(folderToMove), {
+      await supplierFoldersAPI.update(String(folderToMove), {
         name: folder.name,
         parent_id: targetFolderId,
       })

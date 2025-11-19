@@ -861,7 +861,6 @@ export default function Anbar() {
                 const quantity = getWarehouseQuantity(product)
                 const salePrice = parseFloat(product.sale_price?.toString() || '0')
                 const qty = parseFloat(quantity.toString())
-                const _total = salePrice * qty
                 
                 return `
                   <tr>

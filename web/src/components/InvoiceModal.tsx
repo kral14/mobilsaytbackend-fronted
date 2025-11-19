@@ -343,27 +343,6 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({
     setLocalData({ ...localData, invoiceItems: updatedItems })
   }
   
-  const _handleRemoveItem = (index: number) => {
-    const newItems = localData.invoiceItems.filter((_, i) => i !== index)
-    setLocalData({ ...localData, invoiceItems: newItems })
-  }
-  
-  const _handleToggleItemSelection = (index: number) => {
-    if (selectedItemIndices.includes(index)) {
-      setSelectedItemIndices(selectedItemIndices.filter(i => i !== index))
-    } else {
-      setSelectedItemIndices([...selectedItemIndices, index])
-    }
-  }
-  
-  const _handleSelectAllItems = () => {
-    if (selectedItemIndices.length === localData.invoiceItems.length) {
-      setSelectedItemIndices([])
-    } else {
-      setSelectedItemIndices(localData.invoiceItems.map((_, i) => i))
-    }
-  }
-  
   // Hər sətir üçün məhsul axtarışı
   const getFilteredProductsForRow = (searchTerm: string) => {
     if (!searchTerm.trim()) return []
@@ -519,13 +498,6 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({
     return localData.invoiceItems.reduce((sum, item) => sum + (item.total_price || 0), 0)
   }, [localData.invoiceItems])
   
-  // Sütunları sıralı olarak al
-  const _getSortedColumns = () => {
-    return Object.entries(columnConfig)
-      .sort(([, a], [, b]) => a.order - b.order)
-      .map(([key]) => key)
-  }
-  
   // Məhsul bilgilerini al
   const getProductInfo = (productId: number | null) => {
     if (!productId) return { code: '', barcode: '', unit: '' }
@@ -640,8 +612,6 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({
       })
     }
   }
-
-  const _totalAmount = localData.invoiceItems.reduce((sum, item) => sum + Number(item.total_price || 0), 0)
 
   // OK düyməsi funksiyası - yadda saxla, təsdiqlə və bağla
   const handleOK = async () => {

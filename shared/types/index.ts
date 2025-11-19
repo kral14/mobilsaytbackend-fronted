@@ -52,8 +52,8 @@ export interface Product {
   country: string | null
   manufacturer: string | null
   warranty_period: number | null
-  production_date: Date | null
-  expiry_date: Date | null
+  production_date: string | null
+  expiry_date: string | null
   min_stock: number | null
   max_stock: number | null
   tax_rate: number | null
@@ -133,6 +133,7 @@ export interface Supplier {
   email: string | null
   address: string | null
   balance: number | null
+  folder_id?: number | null
   created_at: Date | null
   updated_at: Date | null
 }
