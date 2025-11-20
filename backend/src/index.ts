@@ -43,6 +43,11 @@ const corsOptions: cors.CorsOptions = {
       return callback(null, true)
     }
 
+    // Production-da bütün origin-lərə icazə ver (frontend eyni domen üzərindədir)
+    if (process.env.NODE_ENV === 'production') {
+      return callback(null, true)
+    }
+
     // Whitelist yoxlaması
     const isWhitelisted = allowedOrigins.includes(origin)
 
