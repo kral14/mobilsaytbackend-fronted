@@ -38,6 +38,16 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// Sadə client log (frontend xətalarını backend terminalında görmək üçün)
+export const clientLog = async (level: 'info' | 'error', message: string, context?: any) => {
+  try {
+    await api.post('/test/client-log', { level, message, context })
+  } catch (e) {
+    // Əgər log gedə bilmirsə, sus – əsas işə mane olmasın
+    console.warn('[clientLog] serverə göndərilə bilmədi:', e)
+  }
+}
+
 // Auth API
 export const authAPI = {
   login: async (data: LoginRequest): Promise<AuthResponse> => {
@@ -77,6 +87,18 @@ export const productsAPI = {
     purchase_price?: number
     sale_price?: number
     code?: string
+    article?: string
+    category_id?: number | null
+    type?: string
+    brand?: string
+    model?: string
+    color?: string
+    country?: string
+    manufacturer?: string
+    warranty_period?: number
+    production_date?: string
+    expiry_date?: string
+    is_active?: boolean
   }): Promise<Product> => {
     const response = await api.post<Product>('/products', data)
     return response.data
