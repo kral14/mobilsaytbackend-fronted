@@ -99,7 +99,10 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
         total_price: Number(item.total_price),
       }))
 
-      const totalAmount = normalizedItems.reduce((sum, item) => sum + item.total_price, 0)
+      const totalAmount = normalizedItems.reduce(
+        (sum: number, item: { total_price: number }) => sum + item.total_price,
+        0,
+      )
 
       // Stok mövcudluğunu əvvəlcədən yoxla
       for (const item of normalizedItems) {
@@ -268,7 +271,10 @@ export const updateOrder = async (req: AuthRequest, res: Response) => {
 
       const totalAmount =
         normalizedItems.length > 0
-          ? normalizedItems.reduce((sum, item) => sum + item.total_price, 0)
+          ? normalizedItems.reduce(
+              (sum: number, item: { total_price: number }) => sum + item.total_price,
+              0,
+            )
           : invoice.total_amount
 
       return tx.sale_invoices.update({
