@@ -6,15 +6,17 @@ const router = Router()
 
 router.use(authMiddleware)
 
-// Frontend-dən gələn debug log-lar (məsələn, kamera / barkod xətaları)
+// Frontend-dən gələn debug log-lar (məsələn, kamera / barkod xətaları).
+// Qeyd: production-da da açıq qalır ki, Render loglarında problemi görə bilək.
 router.post('/client-log', (req, res) => {
-  if (process.env.NODE_ENV === 'production') {
-    return res.status(404).json({ success: false, message: 'Endpoint deaktiv edilib' })
-  }
-
   const { level = 'info', message, context } = req.body || {}
 
-  const prefix = level === 'error' ? '❌ [CLIENT_ERROR]' : 'ℹ️ [CLIENT_LOG]'
+  const env = process.env.NODE_ENV || 'development'
+  const prefix =
+    level === 'error'
+      ? `❌ [CLIENT_ERROR][${env}]`
+      : `ℹ️ [CLIENT_LOG][${env}]`
+
   console.log(prefix, message || 'Boş mesaj', 'Context:', JSON.stringify(context || {}, null, 2))
 
   res.json({ success: true })

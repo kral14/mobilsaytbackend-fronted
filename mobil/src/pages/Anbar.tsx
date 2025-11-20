@@ -62,6 +62,13 @@ export default function Alicilar() {
 
   // Barkod oxuma üçün state və referanslar
   const [barcodeScannerVisible, setBarcodeScannerVisible] = useState(false)
+  const [cameraConfirmDone, setCameraConfirmDone] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('cameraPermissionConfirmed') === 'true'
+    } catch {
+      return false
+    }
+  })
   const barcodeScannerRef = useRef<any>(null)
 
   const stopBarcodeScanner = async () => {
@@ -99,70 +106,75 @@ export default function Alicilar() {
         console.warn('Kamera cihazları yoxlanarkən xəta:', e)
       }
 
-      // Öz icazə soruşma pəncərəmiz
-      const allow = window.confirm('Kamera istifadə etmək üçün icazə verirsiniz?')
-      if (!allow) {
-        return
+      // Öz icazə soruşma pəncərəmiz – yalnız birinci dəfə
+      if (!cameraConfirmDone) {
+        const allow = window.confirm('Kamera istifadə etmək üçün icazə verirsiniz?')
+        if (!allow) {
+          return
+        }
+        setCameraConfirmDone(true)
+        try {
+          localStorage.setItem('cameraPermissionConfirmed', 'true')
+        } catch {
+          // ignore
+        }
       }
 
       // Kamera preview sahəsini göstər
       setBarcodeScannerVisible(true)
 
-      // DOM yenilənsin deyə kiçik gecikmə ilə scanner-i başladaq
-      setTimeout(async () => {
-        if (barcodeScannerRef.current) {
-          // Artıq aktivdirsə, təkrar başlatma
-          return
+      if (barcodeScannerRef.current) {
+        // Artıq aktivdirsə, təkrar başlatma
+        return
+      }
+
+      const html5QrCode = new Html5Qrcode('mobile-barcode-reader')
+      barcodeScannerRef.current = html5QrCode
+
+      try {
+        // Daha sürətli və stabil oxu üçün parametrlər
+        const scanConfig = {
+          fps: 18, // saniyədə kadr sayı – 10-dan bir az yüksək
+          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+            // Görüntünün təxminən 60%-i qədər kvadrat sahə seç
+            const minEdge = Math.min(viewfinderWidth, viewfinderHeight)
+            const size = Math.floor(minEdge * 0.6)
+            return { width: size, height: size }
+          },
+          // Arxa kamera üçün mirroring lazım deyil – performansı bir az yaxşılaşdırır
+          disableFlip: true,
+        } as any
+
+        await html5QrCode.start(
+          { facingMode: 'environment' },
+          scanConfig,
+          (decodedText: string) => {
+            // Barkodu forma yaz
+            setNewProduct(prev => ({ ...prev, barcode: decodedText }))
+            // Skanneri bağla
+            stopBarcodeScanner()
+          },
+          (_errorMessage: string) => {
+            // Hər frame üçün error-ları susdururuq
+          },
+        )
+      } catch (err: any) {
+        console.error('Barkod oxuyucu başladılarkən xəta:', err)
+        clientLog('error', 'Barkod oxuyucu başladılarkən xəta', {
+          message: err?.message,
+          name: err?.name,
+          code: (err as any).code,
+        })
+        // Xüsusi mesajlar
+        if (err?.name === 'NotAllowedError') {
+          alert('Kameraya icazə verilmədi. Brauzerin kamera icazə parametrlərini yoxlayın.')
+        } else if (err?.name === 'NotFoundError') {
+          alert('Kamera cihazı tapılmadı. Cihazda kamera olduğuna və bu brauzerin onu görə bildiyinə əmin olun.')
+        } else {
+          alert('Barkod oxuyucu başladılarkən xəta: ' + err.message)
         }
-
-        const html5QrCode = new Html5Qrcode('mobile-barcode-reader')
-        barcodeScannerRef.current = html5QrCode
-
-        try {
-          // Daha sürətli və stabil oxu üçün parametrlər
-          const scanConfig = {
-            fps: 18, // saniyədə kadr sayı – 10-dan bir az yüksək
-            qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-              // Görüntünün təxminən 60%-i qədər kvadrat sahə seç
-              const minEdge = Math.min(viewfinderWidth, viewfinderHeight)
-              const size = Math.floor(minEdge * 0.6)
-              return { width: size, height: size }
-            },
-            // Arxa kamera üçün mirroring lazım deyil – performansı bir az yaxşılaşdırır
-            disableFlip: true,
-          } as any
-
-          await html5QrCode.start(
-            { facingMode: 'environment' },
-            scanConfig,
-            (decodedText: string) => {
-              // Barkodu forma yaz
-              setNewProduct(prev => ({ ...prev, barcode: decodedText }))
-              // Skanneri bağla
-              stopBarcodeScanner()
-            },
-            (_errorMessage: string) => {
-              // Hər frame üçün error-ları susdururuq
-            },
-          )
-        } catch (err: any) {
-          console.error('Barkod oxuyucu başladılarkən xəta:', err)
-          clientLog('error', 'Barkod oxuyucu başladılarkən xəta', {
-            message: err?.message,
-            name: err?.name,
-            code: (err as any).code,
-          })
-          // Xüsusi mesajlar
-          if (err?.name === 'NotAllowedError') {
-            alert('Kameraya icazə verilmədi. Brauzerin kamera icazə parametrlərini yoxlayın.')
-          } else if (err?.name === 'NotFoundError') {
-            alert('Kamera cihazı tapılmadı. Cihazda kamera olduğuna və bu brauzerin onu görə bildiyinə əmin olun.')
-          } else {
-            alert('Barkod oxuyucu başladılarkən xəta: ' + err.message)
-          }
-          await stopBarcodeScanner()
-        }
-      }, 0)
+        await stopBarcodeScanner()
+      }
     } catch (err: any) {
       console.error('Kamera istifadəsi mümkün deyil:', err)
       clientLog('error', 'Kamera istifadəsi mümkün deyil', {
@@ -4070,37 +4082,40 @@ export default function Alicilar() {
               </button>
             </div>
 
-            {barcodeScannerVisible && (
-              <div style={{ marginBottom: '1rem' }}>
-                <div
-                  id="mobile-barcode-reader"
-                  style={{
-                    width: '100%',
-                    minHeight: '260px',
-                    background: '#000',
-                    borderRadius: '8px',
-                    overflow: 'hidden',
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={stopBarcodeScanner}
-                  style={{
-                    marginTop: '0.5rem',
-                    width: '100%',
-                    padding: '0.6rem',
-                    background: '#6c757d',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '0.95rem',
-                  }}
-                >
-                  Kameranı bağla
-                </button>
-              </div>
-            )}
+            <div
+              style={{
+                marginBottom: barcodeScannerVisible ? '1rem' : 0,
+                display: barcodeScannerVisible ? 'block' : 'none',
+              }}
+            >
+              <div
+                id="mobile-barcode-reader"
+                style={{
+                  width: '100%',
+                  minHeight: '260px',
+                  background: '#000',
+                  borderRadius: '8px',
+                  overflow: 'hidden',
+                }}
+              />
+              <button
+                type="button"
+                onClick={stopBarcodeScanner}
+                style={{
+                  marginTop: '0.5rem',
+                  width: '100%',
+                  padding: '0.6rem',
+                  background: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '0.95rem',
+                }}
+              >
+                Kameranı bağla
+              </button>
+            </div>
 
             {/* Təsvir */}
             <div style={{ marginBottom: '1rem' }}>
