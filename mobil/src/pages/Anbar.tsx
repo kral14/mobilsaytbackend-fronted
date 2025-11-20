@@ -119,9 +119,22 @@ export default function Alicilar() {
         barcodeScannerRef.current = html5QrCode
 
         try {
+          // Daha sürətli və stabil oxu üçün parametrlər
+          const scanConfig = {
+            fps: 18, // saniyədə kadr sayı – 10-dan bir az yüksək
+            qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+              // Görüntünün təxminən 60%-i qədər kvadrat sahə seç
+              const minEdge = Math.min(viewfinderWidth, viewfinderHeight)
+              const size = Math.floor(minEdge * 0.6)
+              return { width: size, height: size }
+            },
+            // Arxa kamera üçün mirroring lazım deyil – performansı bir az yaxşılaşdırır
+            disableFlip: true,
+          } as any
+
           await html5QrCode.start(
             { facingMode: 'environment' },
-            { fps: 10, qrbox: { width: 250, height: 250 } },
+            scanConfig,
             (decodedText: string) => {
               // Barkodu forma yaz
               setNewProduct(prev => ({ ...prev, barcode: decodedText }))
@@ -166,10 +179,44 @@ export default function Alicilar() {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'image/*'
-    input.onchange = (e) => {
+    input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0]
-      if (file) {
-        alert('Şəkildən barkod oxuma funksiyası əlavə edilməlidir.')
+      if (!file) return
+
+      try {
+        // Şəkildən oxuma üçün gizli container yarat
+        const containerId = 'mobile-barcode-image-reader'
+        let container = document.getElementById(containerId)
+        if (!container) {
+          container = document.createElement('div')
+          container.id = containerId
+          container.style.display = 'none'
+          document.body.appendChild(container)
+        }
+
+        const html5QrCode = new Html5Qrcode(containerId)
+        try {
+          const decodedText = await html5QrCode.scanFile(file, false)
+          setNewProduct((prev) => ({ ...prev, barcode: decodedText }))
+        } finally {
+          try {
+            await html5QrCode.clear()
+          } catch {
+            // ignore
+          }
+          // Container-i təmizlə
+          const el = document.getElementById(containerId)
+          if (el && el.parentElement) {
+            el.parentElement.removeChild(el)
+          }
+        }
+      } catch (err: any) {
+        console.error('Şəkildən barkod oxunarkən xəta:', err)
+        clientLog('error', 'Şəkildən barkod oxunarkən xəta', {
+          message: err?.message,
+          name: err?.name,
+        })
+        alert('Şəkildən barkod oxunarkən xəta: ' + err.message)
       }
     }
     input.click()
