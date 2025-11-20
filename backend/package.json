@@ -10,7 +10,7 @@
     "postinstall": "npx prisma generate",
     "prisma:push": "npx prisma db push",
     "prisma:migrate": "npx prisma migrate deploy",
-    "start:prod": "npx prisma db push && node dist/index.js"
+    "start:prod": "node dist/index.js"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
