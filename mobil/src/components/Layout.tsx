@@ -371,11 +371,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           style={{
             flex: 1,
             paddingTop: topNavbarVisible ? '0' : '0',
-            // Aşağıda əlavə boşluq istəmirik, cədvəlin hündürlüyünü səhifə daxilində idarə edirik
+            // Aşağıda əlavə boşluq istəmirik, hər səhifə öz içində scroll idarə etsin
             paddingBottom: 0,
-            overflowY: 'auto', // Bütün cihazlar üçün əsas vertical scroll buradadır
+            // Burada vertical scroll-u bağlayırıq ki, məsələn Anbar səhifəsində
+            // yalnız daxili cədvəl konteyneri yuxarı-aşağı hərəkət etsin
+            overflowY: 'hidden',
+            overflowX: 'hidden', // Səhifənin özündə sağa-sola scroll olmasın, yalnız daxili cədvəllər scroll olsun
             WebkitOverflowScrolling: 'touch',
             minWidth: 0, // Flex item overflow üçün
+            touchAction: 'pan-y', // Mobil cihazlarda yalnız yuxarı-aşağı pan icazəsi ver
+            // Scroll chaining-i blokla ki, daxili cədvəldən dartanda səhifə özü tərpənməsin
+            overscrollBehavior: 'none',
           }}
         >
           {children}

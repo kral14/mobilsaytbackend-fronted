@@ -6,19 +6,60 @@ const router = Router()
 
 router.use(authMiddleware)
 
+type ClientLogLevel = 'info' | 'error'
+
+interface ClientLogEntry {
+  id: number
+  timestamp: string
+  level: ClientLogLevel
+  message: string
+  context?: any
+}
+
+const clientLogs: ClientLogEntry[] = []
+let nextLogId = 1
+const MAX_LOGS = 200
+
 // Frontend-dən gələn debug log-lar (məsələn, kamera / barkod xətaları).
-// Qeyd: production-da da açıq qalır ki, Render loglarında problemi görə bilək.
+// Qeyd: production-da da açıq qalır ki, Render loglarında və debug səhifəsində problemi görə bilək.
 router.post('/client-log', (req, res) => {
   const { level = 'info', message, context } = req.body || {}
-
   const env = process.env.NODE_ENV || 'development'
+  const logLevel: ClientLogLevel = level === 'error' ? 'error' : 'info'
+
+  const entry: ClientLogEntry = {
+    id: nextLogId++,
+    timestamp: new Date().toISOString(),
+    level: logLevel,
+    message: message || 'Boş mesaj',
+    context,
+  }
+
+  clientLogs.push(entry)
+  if (clientLogs.length > MAX_LOGS) {
+    clientLogs.splice(0, clientLogs.length - MAX_LOGS)
+  }
+
   const prefix =
-    level === 'error'
+    logLevel === 'error'
       ? `❌ [CLIENT_ERROR][${env}]`
       : `ℹ️ [CLIENT_LOG][${env}]`
 
-  console.log(prefix, message || 'Boş mesaj', 'Context:', JSON.stringify(context || {}, null, 2))
+  console.log(prefix, entry.message, 'Context:', JSON.stringify(context || {}, null, 2))
 
+  res.json({ success: true })
+})
+
+// Debug log-ları oxumaq üçün endpoint
+router.get('/client-log', (req, res) => {
+  const limit = Number(req.query.limit) || 100
+  const slice = clientLogs.slice(-limit)
+  res.json({ logs: slice })
+})
+
+// Debug log-ları təmizləmək üçün endpoint
+router.delete('/client-log', (req, res) => {
+  clientLogs.length = 0
   res.json({ success: true })
 })
 

@@ -1,5 +1,16 @@
 import axios from 'axios'
-import type { LoginRequest, RegisterRequest, AuthResponse, Product, SaleInvoice, CreateOrderRequest, User, Customer, PurchaseInvoice, Supplier } from '../../../shared/types'
+import type {
+  LoginRequest,
+  RegisterRequest,
+  AuthResponse,
+  Product,
+  SaleInvoice,
+  CreateOrderRequest,
+  User,
+  Customer,
+  PurchaseInvoice,
+  Supplier,
+} from '../../../shared/types'
 
 // API URL-i müəyyən et
 const getApiBaseUrl = () => {
@@ -38,14 +49,35 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Sadə client log (frontend xətalarını backend terminalında görmək üçün)
-export const clientLog = async (level: 'info' | 'error', message: string, context?: any) => {
+// Sadə client log (frontend xətalarını backend terminalında və debug səhifəsində görmək üçün)
+export type ClientLogLevel = 'info' | 'error'
+
+export interface ClientLogEntry {
+  id: number
+  timestamp: string
+  level: ClientLogLevel
+  message: string
+  context?: any
+}
+
+export const clientLog = async (level: ClientLogLevel, message: string, context?: any) => {
   try {
     await api.post('/test/client-log', { level, message, context })
   } catch (e) {
     // Əgər log gedə bilmirsə, sus – əsas işə mane olmasın
     console.warn('[clientLog] serverə göndərilə bilmədi:', e)
   }
+}
+
+// Debug API – client log-ları oxumaq və təmizləmək üçün
+export const debugAPI = {
+  getClientLogs: async (limit: number = 100): Promise<ClientLogEntry[]> => {
+    const response = await api.get<{ logs: ClientLogEntry[] }>(`/test/client-log?limit=${limit}`)
+    return response.data.logs
+  },
+  clearClientLogs: async (): Promise<void> => {
+    await api.delete('/test/client-log')
+  },
 }
 
 // Auth API

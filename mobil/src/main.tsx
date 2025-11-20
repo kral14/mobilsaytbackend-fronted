@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
+import { clientLog } from './services/api'
 
 // Lokal development üçün (3000 ↔ 3001) avtomatik yönləndirmə
 const setupLocalPortRedirect = () => {
@@ -43,6 +44,35 @@ const setupLocalPortRedirect = () => {
 }
 
 setupLocalPortRedirect()
+
+// Qlobal error handler-lar – bütün JS xətalarını server debug log-a göndər
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (event) => {
+    try {
+      clientLog('error', 'Unhandled error', {
+        message: event.error?.message || event.message,
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+        stack: event.error?.stack,
+      })
+    } catch {
+      // log xətası ignore
+    }
+  })
+
+  window.addEventListener('unhandledrejection', (event) => {
+    try {
+      const reason: any = event.reason
+      clientLog('error', 'Unhandled promise rejection', {
+        message: reason?.message || String(reason),
+        stack: reason?.stack,
+      })
+    } catch {
+      // log xətası ignore
+    }
+  })
+}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

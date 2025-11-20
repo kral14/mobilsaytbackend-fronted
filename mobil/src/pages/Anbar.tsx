@@ -4,13 +4,13 @@ import Toast from '../components/Toast'
 import { productsAPI, categoriesAPI, clientLog } from '../services/api'
 import type { Product } from '@shared/types'
 import { Html5Qrcode } from 'html5-qrcode'
+import BarcodeImageCropper from '../components/BarcodeImageCropper'
 
 type ExtendedProduct = Product & {
-  phone?: string | null
-  email?: string | null
-  address?: string | null
-  balance?: number | null
   folder_id?: number | null
+  quantity?: number
+  purchase_total?: number
+  sale_total?: number
 }
 
 interface Folder {
@@ -70,6 +70,8 @@ export default function Alicilar() {
     }
   })
   const barcodeScannerRef = useRef<any>(null)
+  const [imageCropOpen, setImageCropOpen] = useState(false)
+  const [imageCropFile, setImageCropFile] = useState<File | null>(null)
 
   const stopBarcodeScanner = async () => {
     if (barcodeScannerRef.current) {
@@ -187,6 +189,14 @@ export default function Alicilar() {
     }
   }
 
+  const handleBarcodeChange = (barcode: string) => {
+    // Yalnız barkodu yenilə, kodu mal təsdiqlənəndə (yadda saxla düyməsində) avtomatik veririk
+    setNewProduct(prev => ({
+      ...prev,
+      barcode,
+    }))
+  }
+
   const handleBarcodeScanFromGallery = () => {
     const input = document.createElement('input')
     input.type = 'file'
@@ -194,45 +204,53 @@ export default function Alicilar() {
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0]
       if (!file) return
-
-      try {
-        // Şəkildən oxuma üçün gizli container yarat
-        const containerId = 'mobile-barcode-image-reader'
-        let container = document.getElementById(containerId)
-        if (!container) {
-          container = document.createElement('div')
-          container.id = containerId
-          container.style.display = 'none'
-          document.body.appendChild(container)
-        }
-
-        const html5QrCode = new Html5Qrcode(containerId)
-        try {
-          const decodedText = await html5QrCode.scanFile(file, false)
-          setNewProduct((prev) => ({ ...prev, barcode: decodedText }))
-        } finally {
-          try {
-            await html5QrCode.clear()
-          } catch {
-            // ignore
-          }
-          // Container-i təmizlə
-          const el = document.getElementById(containerId)
-          if (el && el.parentElement) {
-            el.parentElement.removeChild(el)
-          }
-        }
-      } catch (err: any) {
-        console.error('Şəkildən barkod oxunarkən xəta:', err)
-        clientLog('error', 'Şəkildən barkod oxunarkən xəta', {
-          message: err?.message,
-          name: err?.name,
-        })
-        alert('Şəkildən barkod oxunarkən xəta: ' + err.message)
-      }
+      setImageCropFile(file)
+      setImageCropOpen(true)
     }
     input.click()
   }
+
+  // Avtomatik barkod generator (web Anbar ilə eyni məntiq)
+  const generateBarcode = () => {
+    const timestamp = Date.now().toString()
+    const random = Math.floor(Math.random() * 1000)
+      .toString()
+      .padStart(3, '0')
+    return `BC${timestamp.slice(-8)}${random}`
+  }
+
+  // Mövcud barkodları nəzərə alaraq unikal barkod yarat
+  const handleAutoGenerateBarcode = () => {
+    const existingBarcodes = products.map(p => p.barcode).filter(Boolean) as string[]
+    let newBarcode = generateBarcode()
+
+    while (existingBarcodes.includes(newBarcode)) {
+      newBarcode = generateBarcode()
+    }
+
+    handleBarcodeChange(newBarcode)
+  }
+
+  // Barkod seçim menyusu üçün state
+  const [barcodeOptionsOpen, setBarcodeOptionsOpen] = useState(false)
+
+  // Qalereya və Avto barkod seçimləri üçün menyu aç
+  const handleBarcodeOptionsClick = () => {
+    setBarcodeOptionsOpen(prev => !prev)
+  }
+
+  const handleBarcodeOptionGallery = () => {
+    setBarcodeOptionsOpen(false)
+    handleBarcodeScanFromGallery()
+  }
+
+  const handleBarcodeOptionAuto = () => {
+    setBarcodeOptionsOpen(false)
+    handleAutoGenerateBarcode()
+  }
+
+  // Məhsul modalı üçün tab sistemi: əsas məlumatlar / malın IDS-i (əlavə məlumatlar)
+  const [productModalTab, setProductModalTab] = useState<'basic' | 'details'>('basic')
   const [moveMode, setMoveMode] = useState(false) // Müştəri köçürmə rejimi
   const [moveFolderMode, setMoveFolderMode] = useState(false) // Papka köçürmə rejimi
   const [folderToMove, setFolderToMove] = useState<number | null>(null) // Köçürüləcək papka
@@ -249,14 +267,27 @@ export default function Alicilar() {
     return saved !== null ? saved === 'true' : true
   })
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>(() => {
-    const saved = localStorage.getItem('productTableColumnVisibility')
-    return saved ? JSON.parse(saved) : {
+    const baseVisibility = {
       checkbox: true,
-      code: true,
+      rowNumber: true,
+      id: true,
       name: true,
-      phone: true,
-      folder: true,
-      balance: true,
+      code: true,
+      barcode: true,
+      unit: true,
+      purchase_price: true,
+      sale_price: true,
+      quantity: true,
+      purchase_total: true,
+      sale_total: true,
+    }
+    const saved = localStorage.getItem('productTableColumnVisibility')
+    if (!saved) return baseVisibility
+    try {
+      const parsed = JSON.parse(saved)
+      return { ...baseVisibility, ...parsed }
+    } catch {
+      return baseVisibility
     }
   })
   const [folderViewMode, setFolderViewMode] = useState<'sidebar' | 'accordion'>(() => {
@@ -292,20 +323,55 @@ export default function Alicilar() {
   
   // Sütun konfiqurasiyası
   const [columnOrder, setColumnOrder] = useState<string[]>(() => {
+    const defaultOrder = [
+      'checkbox',
+      'rowNumber',
+      'id',
+      'name',
+      'code',
+      'barcode',
+      'unit',
+      'purchase_price',
+      'sale_price',
+      'quantity',
+      'purchase_total',
+      'sale_total',
+    ]
     const saved = localStorage.getItem('productTableColumnOrder')
-    // Yeni "rowNumber" sütununu default olaraq checkbox-dan sonra əlavə edək
-    return saved ? JSON.parse(saved) : ['checkbox', 'rowNumber', 'code', 'name', 'phone', 'folder', 'balance']
+    if (!saved) return defaultOrder
+    try {
+      const parsed = JSON.parse(saved)
+      // Əgər köhnə config-dirsə (məsələn, id sütunu yoxdur), yeni default-u istifadə et
+      if (!Array.isArray(parsed) || !parsed.includes('id')) {
+        return defaultOrder
+      }
+      return parsed
+    } catch {
+      return defaultOrder
+    }
   })
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
-    const saved = localStorage.getItem('productTableColumnWidths')
-    return saved ? JSON.parse(saved) : {
+    const baseWidths: Record<string, number> = {
       checkbox: 50,
-      rowNumber: 70,
-      code: 120,
+      rowNumber: 60,
+      id: 60,
       name: 200,
-      phone: 150,
-      folder: 150,
-      balance: 100,
+      code: 110,
+      barcode: 150,
+      unit: 80,
+      purchase_price: 120,
+      sale_price: 120,
+      quantity: 90,
+      purchase_total: 120,
+      sale_total: 120,
+    }
+    const saved = localStorage.getItem('productTableColumnWidths')
+    if (!saved) return baseWidths
+    try {
+      const parsed = JSON.parse(saved)
+      return { ...baseWidths, ...parsed }
+    } catch {
+      return baseWidths
     }
   })
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(() => {
@@ -322,9 +388,8 @@ export default function Alicilar() {
   const searchPanelRef = useRef<HTMLDivElement>(null)
   const filterPanelRef = useRef<HTMLDivElement>(null)
   const folderPanelRef = useRef<HTMLDivElement>(null)
-  const tableHeaderRef = useRef<HTMLTableElement>(null)
-  const tableHeaderScrollRef = useRef<HTMLDivElement>(null)
   const tableBodyScrollRef = useRef<HTMLDivElement>(null)
+  const tableTouchStartYRef = useRef<number | null>(null)
   const [toolbarHeight, setToolbarHeight] = useState(60)
   const [searchPanelHeight, setSearchPanelHeight] = useState(0)
   const [filterPanelHeight, setFilterPanelHeight] = useState(0)
@@ -333,6 +398,46 @@ export default function Alicilar() {
   useEffect(() => {
     loadProducts()
     loadFolders()
+  }, [])
+
+  // iOS Safari-də cədvəli dartanda səhifənin özü “rezin” kimi qaçmasın deyə
+  // daxili scroll konteynerində overscroll-u JS ilə bloklayırıq
+  useEffect(() => {
+    const el = tableBodyScrollRef.current
+    if (!el) return
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        tableTouchStartYRef.current = e.touches[0].clientY
+      }
+    }
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (tableTouchStartYRef.current == null) return
+      if (e.touches.length === 0) return
+
+      const currentY = e.touches[0].clientY
+      const diffY = currentY - tableTouchStartYRef.current
+
+      const scrollTop = el.scrollTop
+      const maxScroll = el.scrollHeight - el.clientHeight
+      const atTop = scrollTop <= 0
+      const atBottom = scrollTop >= maxScroll
+
+      // Yuxarı hissədə aşağıya doğru dartma və ya aşağı hissədə yuxarıya dartma zamanı
+      // default davranışı bloklayırıq ki, parent scroll (səhifə) hərəkət etməsin
+      if ((atTop && diffY > 0) || (atBottom && diffY < 0)) {
+        e.preventDefault()
+      }
+    }
+
+    el.addEventListener('touchstart', handleTouchStart, { passive: true })
+    el.addEventListener('touchmove', handleTouchMove, { passive: false })
+
+    return () => {
+      el.removeEventListener('touchstart', handleTouchStart)
+      el.removeEventListener('touchmove', handleTouchMove)
+    }
   }, [])
 
   // Toolbar və panellərin hündürlüyünü hesabla
@@ -362,34 +467,6 @@ export default function Alicilar() {
     window.addEventListener('resize', updateHeights)
     return () => window.removeEventListener('resize', updateHeights)
   }, [searchOpen, filterOpen, folderOpen])
-
-  // Cədvəl başlığı və gövdəsi scroll sinxronizasiyası
-  useEffect(() => {
-    const headerScroll = tableHeaderScrollRef.current
-    const bodyScroll = tableBodyScrollRef.current
-
-    if (!headerScroll || !bodyScroll) return
-
-    const handleHeaderScroll = () => {
-      if (bodyScroll.scrollLeft !== headerScroll.scrollLeft) {
-        bodyScroll.scrollLeft = headerScroll.scrollLeft
-      }
-    }
-
-    const handleBodyScroll = () => {
-      if (headerScroll.scrollLeft !== bodyScroll.scrollLeft) {
-        headerScroll.scrollLeft = bodyScroll.scrollLeft
-      }
-    }
-
-    headerScroll.addEventListener('scroll', handleHeaderScroll)
-    bodyScroll.addEventListener('scroll', handleBodyScroll)
-
-    return () => {
-      headerScroll.removeEventListener('scroll', handleHeaderScroll)
-      bodyScroll.removeEventListener('scroll', handleBodyScroll)
-    }
-  }, [products.length])
 
   // Sütun konfiqurasiyasını localStorage-a yaz
   useEffect(() => {
@@ -663,11 +740,16 @@ export default function Alicilar() {
   const columnConfig: Record<string, { label: string; align?: 'left' | 'right' | 'center'; render?: (product: ExtendedProduct) => React.ReactNode }> = {
     checkbox: { label: '', align: 'center' },
     rowNumber: { label: '№', align: 'center' },
+    id: { label: 'ID', align: 'center' },
+    name: { label: 'Məhsul adı', align: 'left' },
     code: { label: 'Kod', align: 'left' },
-    name: { label: 'Ad', align: 'left' },
-    phone: { label: 'Telefon', align: 'left' },
-    folder: { label: 'Papka', align: 'left' },
-    balance: { label: 'Balans', align: 'right' },
+    barcode: { label: 'Barkod', align: 'left' },
+    unit: { label: 'Vahid', align: 'left' },
+    purchase_price: { label: 'Alış qiyməti', align: 'right' },
+    sale_price: { label: 'Satış qiyməti', align: 'right' },
+    quantity: { label: 'Qalıq', align: 'right' },
+    purchase_total: { label: 'Alış cəm', align: 'right' },
+    sale_total: { label: 'Satış cəm', align: 'right' },
   }
 
   // Sütun görünürlüyünü localStorage-a yaz
@@ -677,24 +759,47 @@ export default function Alicilar() {
 
   // Varsayılanlara qaytar
   const handleResetToDefaults = () => {
-    const defaultOrder = ['checkbox', 'rowNumber', 'code', 'name', 'phone', 'folder', 'balance']
+    const defaultOrder = [
+      'checkbox',
+      'rowNumber',
+      'id',
+      'name',
+      'code',
+      'barcode',
+      'unit',
+      'purchase_price',
+      'sale_price',
+      'quantity',
+      'purchase_total',
+      'sale_total',
+    ]
     const defaultWidths = {
       checkbox: 50,
-      rowNumber: 70,
-      code: 120,
+      rowNumber: 60,
+      id: 60,
       name: 200,
-      phone: 150,
-      folder: 150,
-      balance: 100,
+      code: 110,
+      barcode: 150,
+      unit: 80,
+      purchase_price: 120,
+      sale_price: 120,
+      quantity: 90,
+      purchase_total: 120,
+      sale_total: 120,
     }
     const defaultVisibility = {
       checkbox: true,
       rowNumber: true,
-      code: true,
+      id: true,
       name: true,
-      phone: true,
-      folder: true,
-      balance: true,
+      code: true,
+      barcode: true,
+      unit: true,
+      purchase_price: true,
+      sale_price: true,
+      quantity: true,
+      purchase_total: true,
+      sale_total: true,
     }
     setColumnOrder(defaultOrder)
     setColumnWidths(defaultWidths)
@@ -939,14 +1044,14 @@ export default function Alicilar() {
     // Redaktə rejimi deyil, yeni məhsul kimi aç (kod boş olsun)
     setEditingProductId(null)
     setNewProduct({
-      code: '', // Kod boş – backend yeni kod generasiya edə bilər
+      code: '', // Kopyalananda kod boş olsun
       name: original.name || '',
       phone: '',
       email: '',
       address: '',
       folder_id: (original as ExtendedProduct).folder_id ?? original.category_id ?? selectedFolder ?? null,
       article: original.article || '',
-      barcode: original.barcode || '',
+      barcode: '', // Kopyalananda barkod da boş olsun, yadda saxlayanda avto yaransın
       description: original.description || '',
       unit: original.unit || 'ədəd',
       purchase_price: original.purchase_price?.toString() || '',
@@ -1093,12 +1198,53 @@ export default function Alicilar() {
     try {
       // Kod və barkod dəyərlərini hazırla
       const trimmedCode = newProduct.code.trim()
-      const trimmedBarcode = newProduct.barcode.trim()
+      let trimmedBarcode = newProduct.barcode.trim()
+
+      // Əgər barkod boşdursa, avtomatik unikal barkod yarat
+      if (!trimmedBarcode) {
+        const existingBarcodes = products
+          .map(p => p.barcode)
+          .filter((b): b is string => !!b)
+
+        let newBarcode = generateBarcode()
+        while (existingBarcodes.includes(newBarcode)) {
+          newBarcode = generateBarcode()
+        }
+
+        trimmedBarcode = newBarcode
+      }
 
       // Yeni məhsulda kod boşdursa və barkod kifayət qədər uzundursa, barkodun son 6 rəqəmini kod kimi istifadə et
       let finalCode = trimmedCode
       if (!finalCode && trimmedBarcode && trimmedBarcode.length >= 6) {
         finalCode = trimmedBarcode.slice(-6)
+      }
+
+      // Eyni kod / barkodla məhsul təsdiqlənməsin (unikallıq yoxlaması)
+      const currentId = editingProductId
+
+      if (finalCode) {
+        const hasSameCode = products.some(
+          p =>
+            (currentId === null || p.id !== currentId) &&
+            (p.code ? p.code.trim() : '') === finalCode,
+        )
+        if (hasSameCode) {
+          setToast({ message: 'Bu kodla artıq məhsul var. Zəhmət olmasa fərqli kod daxil edin.', type: 'error' })
+          return
+        }
+      }
+
+      if (trimmedBarcode) {
+        const hasSameBarcode = products.some(
+          p =>
+            (currentId === null || p.id !== currentId) &&
+            (p.barcode ? p.barcode.trim() : '') === trimmedBarcode,
+        )
+        if (hasSameBarcode) {
+          setToast({ message: 'Bu barkodla artıq məhsul var. Zəhmət olmasa fərqli barkod istifadə edin.', type: 'error' })
+          return
+        }
       }
 
       // Papka -> kateqoriya id
@@ -1831,51 +1977,28 @@ export default function Alicilar() {
                           padding: '0.5rem',
                           borderRight: '1px solid #e0e0e0',
                           color: '#666',
+                          fontFamily: 'monospace',
                         }}
                       >
-                        {product.phone || '-'}
+                        {product.barcode || '-'}
                       </td>
                       <td 
                         style={{ 
                           padding: '0.5rem',
                           borderRight: '1px solid #e0e0e0',
-                          color: product.folder_id ? '#1976d2' : '#666',
-                          cursor: product.folder_id ? 'pointer' : 'default',
-                          textDecoration: product.folder_id ? 'underline' : 'none',
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          if (product.folder_id) {
-                            setSelectedFolder(product.folder_id)
-                            setSelectedIds(new Set())
-                            if (folderViewMode === 'accordion') {
-                              setFolderOpen(true)
-                            }
-                          }
-                        }}
-                        onContextMenu={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          if (product.folder_id) {
-                            setContextMenu({
-                              x: e.clientX,
-                              y: e.clientY,
-                              folderId: product.folder_id,
-                            })
-                          }
+                          color: '#666',
                         }}
                       >
-                        {getFolderNameForProduct(product.folder_id)}
+                        {product.unit || 'ədəd'}
                       </td>
                       <td 
                         style={{ 
                           padding: '0.5rem',
                           textAlign: 'right',
                           fontWeight: 'bold',
-                          color: product.balance && product.balance < 0 ? '#d32f2f' : '#2e7d32',
                         }}
                       >
-                        {product.balance !== null ? Number(product.balance).toFixed(2) : '0.00'} ₼
+                        {getQuantityForProduct(product)}
                       </td>
                     </tr>
                   )
@@ -1889,27 +2012,6 @@ export default function Alicilar() {
   }
 
   const folderTree = buildFolderTree(folders)
-
-  // Müştəriləri seçilmiş papkaya görə filtr et
-  // Müştərinin papka adını tap (getSortedProducts-dan əvvəl olmalıdır)
-  const getFolderNameForProduct = (folderId: number | null | undefined): string => {
-    if (folderId === null || folderId === undefined) {
-      return '-'
-    }
-    const findFolder = (folderList: Folder[]): Folder | null => {
-      for (const folder of folderList) {
-        if (folder.id === folderId) return folder
-        if (folder.children) {
-          const found = findFolder(folder.children)
-          if (found) return found
-        }
-      }
-      return null
-    }
-    
-    const folder = findFolder(folders)
-    return folder ? folder.name : '-'
-  }
 
   // Sort funksiyası
   const handleSort = (columnKey: string) => {
@@ -1931,7 +2033,25 @@ export default function Alicilar() {
     })
   }
 
-  // Sıralanmış müştərilər
+  const getQuantityForProduct = (product: ExtendedProduct): number => {
+    const raw = (product as any).warehouse?.[0]?.quantity
+    const num = raw !== null && raw !== undefined ? Number(raw) : 0
+    return isNaN(num) ? 0 : num
+  }
+
+  const getPurchaseTotalForProduct = (product: ExtendedProduct): number => {
+    const qty = getQuantityForProduct(product)
+    const price = product.purchase_price !== null && product.purchase_price !== undefined ? Number(product.purchase_price) : 0
+    return (isNaN(qty) ? 0 : qty) * (isNaN(price) ? 0 : price)
+  }
+
+  const getSaleTotalForProduct = (product: ExtendedProduct): number => {
+    const qty = getQuantityForProduct(product)
+    const price = product.sale_price !== null && product.sale_price !== undefined ? Number(product.sale_price) : 0
+    return (isNaN(qty) ? 0 : qty) * (isNaN(price) ? 0 : price)
+  }
+
+  // Sıralanmış məhsullar
   const getSortedProducts = (productsList: ExtendedProduct[]) => {
     if (!sortConfig) return productsList
 
@@ -1940,6 +2060,10 @@ export default function Alicilar() {
       let bValue: any
 
       switch (sortConfig.key) {
+        case 'id':
+          aValue = a.id
+          bValue = b.id
+          break
         case 'code':
           aValue = a.code || ''
           bValue = b.code || ''
@@ -1948,17 +2072,33 @@ export default function Alicilar() {
           aValue = a.name || ''
           bValue = b.name || ''
           break
-        case 'phone':
-          aValue = a.phone || ''
-          bValue = b.phone || ''
+        case 'barcode':
+          aValue = a.barcode || ''
+          bValue = b.barcode || ''
           break
-        case 'folder':
-          aValue = getFolderNameForProduct(a.folder_id) || ''
-          bValue = getFolderNameForProduct(b.folder_id) || ''
+        case 'unit':
+          aValue = a.unit || ''
+          bValue = b.unit || ''
           break
-        case 'balance':
-          aValue = a.balance || 0
-          bValue = b.balance || 0
+        case 'purchase_price':
+          aValue = a.purchase_price || 0
+          bValue = b.purchase_price || 0
+          break
+        case 'sale_price':
+          aValue = a.sale_price || 0
+          bValue = b.sale_price || 0
+          break
+        case 'quantity':
+          aValue = getQuantityForProduct(a)
+          bValue = getQuantityForProduct(b)
+          break
+        case 'purchase_total':
+          aValue = getPurchaseTotalForProduct(a)
+          bValue = getPurchaseTotalForProduct(b)
+          break
+        case 'sale_total':
+          aValue = getSaleTotalForProduct(a)
+          bValue = getSaleTotalForProduct(b)
           break
         default:
           return 0
@@ -1969,9 +2109,11 @@ export default function Alicilar() {
           ? aValue.localeCompare(bValue)
           : bValue.localeCompare(aValue)
       } else {
+        const av = Number(aValue)
+        const bv = Number(bValue)
         return sortConfig.direction === 'asc'
-          ? (aValue > bValue ? 1 : -1)
-          : (aValue < bValue ? 1 : -1)
+          ? (av > bv ? 1 : av < bv ? -1 : 0)
+          : (av < bv ? 1 : av > bv ? -1 : 0)
       }
     })
 
@@ -1990,7 +2132,7 @@ export default function Alicilar() {
         return (
           product.name?.toLowerCase().includes(searchLower) ||
           product.code?.toLowerCase().includes(searchLower) ||
-          product.phone?.toLowerCase().includes(searchLower)
+          product.barcode?.toLowerCase().includes(searchLower)
         )
       })
   
@@ -2002,16 +2144,16 @@ export default function Alicilar() {
 
   // Aşağı summary üçün statistikalar
   const totalVisibleCount = filteredProducts.length
-  const totalVisibleBalance = filteredProducts.reduce((sum, c) => {
-    const value = c.balance !== null && c.balance !== undefined ? Number(c.balance) : 0
-    return sum + (isNaN(value) ? 0 : value)
+  const totalVisibleQuantity = filteredProducts.reduce((sum, c) => {
+    return sum + getQuantityForProduct(c)
   }, 0)
-  const totalSelectedCount = selectedIds.size
-  const totalSelectedBalance = products.reduce((sum, c) => {
-    if (!selectedIds.has(c.id)) return sum
-    const value = c.balance !== null && c.balance !== undefined ? Number(c.balance) : 0
-    return sum + (isNaN(value) ? 0 : value)
+  const totalVisiblePurchaseTotal = filteredProducts.reduce((sum, c) => {
+    return sum + getPurchaseTotalForProduct(c)
   }, 0)
+  const totalVisibleSaleTotal = filteredProducts.reduce((sum, c) => {
+    return sum + getSaleTotalForProduct(c)
+  }, 0)
+  // Seçilmiş sətrlər üçün statistikalar (hazırda istifadə olunmur, gələcəkdə lazım ola bilər)
 
   // rowsPerPage dəyərini localStorage-a yaz
   useEffect(() => {
@@ -3209,6 +3351,8 @@ export default function Alicilar() {
                           <tbody>
                             {products.map((product) => {
                               const isSelected = selectedIds.has(product.id)
+                              const qty = getQuantityForProduct(product)
+                              const saleTotal = getSaleTotalForProduct(product)
                               return (
                                 <tr
                                   key={product.id}
@@ -3226,46 +3370,77 @@ export default function Alicilar() {
                                     if (!isSelected) e.currentTarget.style.background = 'white'
                                   }}
                                 >
-                                  <td style={{ padding: '0.5rem', textAlign: 'center', borderRight: '1px solid #e0e0e0' }} onClick={(e) => e.stopPropagation()}>
-                                    <input type="checkbox" checked={isSelected} onChange={() => handleSelect(product.id)} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
+                                  <td
+                                    style={{
+                                      padding: '0.5rem',
+                                      textAlign: 'center',
+                                      borderRight: '1px solid #e0e0e0',
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => handleSelect(product.id)}
+                                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                    />
                                   </td>
-                                  <td style={{ padding: '0.5rem', borderRight: '1px solid #e0e0e0', color: '#666', fontFamily: 'monospace' }}>{product.code || '-'}</td>
-                                  <td style={{ padding: '0.5rem', borderRight: '1px solid #e0e0e0', fontWeight: isSelected ? 'bold' : 'normal' }}>{product.name}</td>
-                                  <td style={{ padding: '0.5rem', borderRight: '1px solid #e0e0e0', color: '#666' }}>{product.phone || '-'}</td>
-                                  <td 
-                                    style={{ 
-                                      padding: '0.5rem', 
-                                      borderRight: '1px solid #e0e0e0', 
-                                      color: product.folder_id ? '#1976d2' : '#666',
-                                      cursor: product.folder_id ? 'pointer' : 'default',
-                                      textDecoration: product.folder_id ? 'underline' : 'none',
-                                    }}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      if (product.folder_id) {
-                                        setSelectedFolder(product.folder_id)
-                                        setSelectedIds(new Set())
-                                        if (folderViewMode === 'accordion') {
-                                          setFolderOpen(true)
-                                        }
-                                      }
-                                    }}
-                                    onContextMenu={(e) => {
-                                      e.preventDefault()
-                                      e.stopPropagation()
-                                      if (product.folder_id) {
-                                        setContextMenu({
-                                          x: e.clientX,
-                                          y: e.clientY,
-                                          folderId: product.folder_id,
-                                        })
-                                      }
+                                  <td
+                                    style={{
+                                      padding: '0.5rem',
+                                      borderRight: '1px solid #e0e0e0',
+                                      color: '#666',
+                                      fontFamily: 'monospace',
                                     }}
                                   >
-                                    {getFolderNameForProduct(product.folder_id)}
+                                    {product.code || '-'}
                                   </td>
-                                  <td style={{ padding: '0.5rem', textAlign: 'right', fontWeight: 'bold', color: product.balance && product.balance < 0 ? '#d32f2f' : '#2e7d32' }}>
-                                    {product.balance !== null ? Number(product.balance).toFixed(2) : '0.00'} ₼
+                                  <td
+                                    style={{
+                                      padding: '0.5rem',
+                                      borderRight: '1px solid #e0e0e0',
+                                      fontWeight: isSelected ? 'bold' : 'normal',
+                                    }}
+                                  >
+                                    {product.name}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: '0.5rem',
+                                      borderRight: '1px solid #e0e0e0',
+                                      color: '#666',
+                                      fontFamily: 'monospace',
+                                    }}
+                                  >
+                                    {product.barcode || '-'}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: '0.5rem',
+                                      borderRight: '1px solid #e0e0e0',
+                                      color: '#666',
+                                    }}
+                                  >
+                                    {product.unit || 'ədəd'}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: '0.5rem',
+                                      borderRight: '1px solid #e0e0e0',
+                                      textAlign: 'right',
+                                    }}
+                                  >
+                                    {qty}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: '0.5rem',
+                                      textAlign: 'right',
+                                      fontWeight: 'bold',
+                                      color: saleTotal < 0 ? '#d32f2f' : '#2e7d32',
+                                    }}
+                                  >
+                                    {saleTotal.toFixed(2)} ₼
                                   </td>
                                 </tr>
                               )
@@ -3301,14 +3476,18 @@ export default function Alicilar() {
               flexDirection: 'column',
             }}
           >
-            {loading ? (
+            {/* Yüklənmə vəziyyəti */}
+            {loading && (
               <div style={{ padding: '2rem', textAlign: 'center' }}>Yüklənir...</div>
-            ) : (
-              <div 
-                style={{ 
-                  overflow: 'auto', 
+            )}
+
+            {/* Cədvəl konteyneri – burada scroll YOXDUR, yalnız daxili tableBodyScrollRef scroll olur */}
+            {!loading && (
+              <div
+                style={{
+                  overflow: 'hidden', // vertikal scroll bu konteynerdə deyil
                   flex: 1,
-                  padding: 0, 
+                  padding: 0,
                   margin: 0,
                   width: '100%',
                   maxWidth: '100%',
@@ -3316,79 +3495,79 @@ export default function Alicilar() {
                   position: 'relative',
                   display: 'flex',
                   flexDirection: 'column',
-                  WebkitOverflowScrolling: 'touch',
                   paddingBottom: isMobile ? 8 : 8, // Alt hissədə minimal boşluq
                 }}
               >
-                {/* Müştərilər cədvəli və ya boş mesaj */}
-                {filteredProducts.length === 0 ? (
-                  <div style={{ 
-                    padding: '2rem', 
-                    textAlign: 'center', 
-                    color: '#666',
-                    background: 'white',
-                  }}>
-                    {selectedFolder === null 
-                      ? 'Alıcı tapılmadı'
-                      : `Bu papkada alıcı yoxdur`
-                    }
-              </div>
-            ) : (
-                <div style={{ 
-                  position: 'relative',
-                  flex: 1,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  minHeight: 0,
-                  overflow: 'hidden',
-                }}>
-                  {debugMode && (
-                  <div className="debug-label-purple" style={{
-                    position: 'absolute',
-                    top: '2px',
-                    left: '2px',
-                    background: 'purple',
-                    color: 'white',
-                    padding: '2px 4px',
-                    fontSize: '10px',
-                    zIndex: 10000,
-                    fontWeight: 'bold',
-                  }}>PURPLE: Loading...</div>
-                  )}
-                <div 
-                  ref={tableHeaderScrollRef}
-                  style={{ 
-                  flexShrink: 0,
-                  position: 'sticky',
-                  top: 0,
-                  zIndex: 998,
-                  background: 'white',
-                  overflowX: 'auto',
-                  overflowY: 'hidden',
-                  WebkitOverflowScrolling: 'touch',
-                }}>
-                <table
-                    ref={(el) => {
-                      if (el && !tableHeaderRef.current) {
-                        (tableHeaderRef as React.MutableRefObject<HTMLTableElement | null>).current = el
-                        const rect = el.getBoundingClientRect()
-                        const label = document.querySelector('.debug-label-purple') as HTMLElement
-                        if (label) {
-                          label.textContent = `PURPLE: ${rect.width.toFixed(0)}x${rect.height.toFixed(0)}px`
-                        }
-                      }
+                {/* Boş mesaj */}
+                {filteredProducts.length === 0 && (
+                  <div
+                    style={{
+                      padding: '2rem',
+                      textAlign: 'center',
+                      color: '#666',
+                      background: 'white',
                     }}
+                  >
+                    {selectedFolder === null ? 'Alıcı tapılmadı' : `Bu papkada alıcı yoxdur`}
+                  </div>
+                )}
+
+                {/* Cədvəl yalnız məhsul olanda göstərilsin */}
+                {filteredProducts.length > 0 && (
+                  <div
+                    style={{
+                      position: 'relative',
+                      flex: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      minHeight: 0,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {debugMode && (
+                      <div
+                        className="debug-label-purple"
+                        style={{
+                          position: 'absolute',
+                          top: '2px',
+                          left: '2px',
+                          background: 'purple',
+                          color: 'white',
+                          padding: '2px 4px',
+                          fontSize: '10px',
+                          zIndex: 10000,
+                          fontWeight: 'bold',
+                        }}
+                      >
+                        PURPLE
+                      </div>
+                    )}
+                    <div
+                      ref={tableBodyScrollRef}
+                      style={{
+                        minHeight: 0,
+                        overflowX: 'auto',
+                        // Yalnız cədvəl gövdəsi yuxarı-aşağı scroll olsun, sabit çərçivə hündürlüyü ilə
+                        overflowY: 'auto',
+                        maxHeight: `${tableBodyMaxHeightPx}px`,
+                        flex: 1,
+                        WebkitOverflowScrolling: 'touch',
+                        // Daxili scroll bitəndə hərəkət yuxarı parent-lərə keçməsin (mobil rezin effektini azaldır)
+                        overscrollBehavior: 'contain',
+                      }}
+                    >
+                <table
                   style={{
                     width: 'max-content',
                     minWidth: '100%',
                     borderCollapse: 'collapse',
                     fontSize: '0.875rem',
                     background: 'white',
-                      margin: 0,
-                      padding: 0,
-                      border: debugMode ? '3px solid purple' : 'none', // DEBUG
-                      boxSizing: 'border-box',
-                      display: 'table',
+                    margin: 0,
+                    padding: 0,
+                    border: debugMode ? '3px solid purple' : 'none',
+                    boxSizing: 'border-box',
+                    display: 'table',
                   }}
                 >
                   <colgroup>
@@ -3397,15 +3576,20 @@ export default function Alicilar() {
                       if (!config || !columnVisibility[columnKey]) return null
                       const isCheckbox = columnKey === 'checkbox'
                       const width = columnWidths[columnKey] || (isCheckbox ? 50 : 100)
-                      return <col key={columnKey} style={{ width: `${width}px`, minWidth: `${width}px`, maxWidth: `${width}px` }} />
+                      return (
+                        <col
+                          key={columnKey}
+                          style={{ width: `${width}px`, minWidth: `${width}px`, maxWidth: `${width}px` }}
+                        />
+                      )
                     })}
                   </colgroup>
-                  <thead style={{ display: 'table-header-group' }}>
+                  <thead>
                     <tr style={{ background: '#f5f5f5' }}>
                       {columnOrder.map((columnKey) => {
                         const config = columnConfig[columnKey]
                         if (!config) return null
-                        
+
                         // Sütun görünürlüyünü yoxla
                         if (!columnVisibility[columnKey]) return null
 
@@ -3434,11 +3618,15 @@ export default function Alicilar() {
                             onDragEnd={handleDragEnd}
                             onClick={() => !isCheckbox && !isDragging && handleSort(columnKey)}
                             style={{
-                              padding: isCheckbox 
-                                ? (folderTreeVisible ? '0.75rem 0.5rem' : '0.75rem 0.25rem')
+                              padding: isCheckbox
+                                ? folderTreeVisible
+                                  ? '0.75rem 0.5rem'
+                                  : '0.75rem 0.25rem'
                                 : '0.75rem',
-                              paddingLeft: isCheckbox 
-                                ? (folderTreeVisible ? '0.5rem' : '0.25rem')
+                              paddingLeft: isCheckbox
+                                ? folderTreeVisible
+                                  ? '0.5rem'
+                                  : '0.25rem'
                                 : '0.75rem',
                               textAlign: config.align || 'left',
                               borderBottom: '2px solid #ddd',
@@ -3457,11 +3645,10 @@ export default function Alicilar() {
                               WebkitUserSelect: 'none',
                               MozUserSelect: 'none',
                               msUserSelect: 'none',
-                              position: isCheckbox ? 'sticky' : 'relative',
-                              left: isCheckbox ? 0 : 'auto',
-                              zIndex: isCheckbox ? 10 : 'auto',
-                              background: isCheckbox ? '#f5f5f5' : 'transparent',
-                              touchAction: 'none', // Touch event-ləri üçün
+                              background: '#f5f5f5',
+                              position: 'sticky',
+                              top: 0,
+                              zIndex: isCheckbox ? 11 : 10,
                             }}
                           >
                             {isCheckbox ? (
@@ -3488,7 +3675,8 @@ export default function Alicilar() {
                               />
                             ) : (
                               <>
-                                {config.label}{sortIcon}
+                                {config.label}
+                                {sortIcon}
                                 {/* Resize handle */}
                                 <div
                                   onMouseDown={(e) => handleResizeStart(e, columnKey)}
@@ -3521,48 +3709,6 @@ export default function Alicilar() {
                       })}
                     </tr>
                   </thead>
-                </table>
-                </div>
-                <div 
-                  ref={tableBodyScrollRef}
-                  style={{ 
-                    minHeight: 0,
-                    overflowX: 'auto',
-                    // Yalnız cədvəl gövdəsi yuxarı-aşağı scroll olsun, sabit çərçivə hündürlüyü ilə
-                    overflowY: 'auto',
-                    maxHeight: `${tableBodyMaxHeightPx}px`,
-                    flex: 1,
-                  }}>
-                <table
-                  style={{
-                    width: 'max-content',
-                    minWidth: '100%',
-                    borderCollapse: 'collapse',
-                    fontSize: '0.875rem',
-                    background: 'white',
-                    margin: 0,
-                    padding: 0,
-                    border: debugMode ? '3px solid purple' : 'none',
-                    boxSizing: 'border-box',
-                    display: 'table',
-                  }}
-                >
-                  <colgroup>
-                    {columnOrder.map((columnKey) => {
-                      const config = columnConfig[columnKey]
-                      if (!config || !columnVisibility[columnKey]) return null
-                      const isCheckbox = columnKey === 'checkbox'
-                      const width = columnWidths[columnKey] || (isCheckbox ? 50 : 100)
-                      return <col key={columnKey} style={{ width: `${width}px`, minWidth: `${width}px`, maxWidth: `${width}px` }} />
-                    })}
-                  </colgroup>
-                  <thead style={{ display: 'none' }}>
-                    <tr>
-                      {columnOrder.map((columnKey, index) => (
-                        <th key={`spacer-${columnKey}-${index}`} style={{ padding: 0, border: 'none', height: 0 }}></th>
-                      ))}
-                    </tr>
-                  </thead>
                   <tbody>
                     {filteredProducts.map((product) => {
                       const isSelected = selectedIds.has(product.id)
@@ -3576,26 +3722,38 @@ export default function Alicilar() {
                             borderBottom: '1px solid #eee',
                             transition: 'background 0.2s',
                           }}
-                          onMouseEnter={(e) => {
-                            if (!isSelected) {
-                              e.currentTarget.style.background = '#f5f5f5'
-                              // Checkbox sütununun background rəngini də yenilə
-                              const checkboxCell = e.currentTarget.querySelector('td[data-column-key="checkbox"]') as HTMLElement
-                              if (checkboxCell) {
-                                checkboxCell.style.background = '#f5f5f5'
-                              }
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!isSelected) {
-                              e.currentTarget.style.background = 'white'
-                              // Checkbox sütununun background rəngini də yenilə
-                              const checkboxCell = e.currentTarget.querySelector('td[data-column-key="checkbox"]') as HTMLElement
-                              if (checkboxCell) {
-                                checkboxCell.style.background = 'white'
-                              }
-                            }
-                          }}
+                          onMouseEnter={
+                            isMobile
+                              ? undefined
+                              : (e) => {
+                                  if (!isSelected) {
+                                    e.currentTarget.style.background = '#f5f5f5'
+                                    // Checkbox sütununun background rəngini də yenilə
+                                    const checkboxCell = e.currentTarget.querySelector(
+                                      'td[data-column-key="checkbox"]',
+                                    ) as HTMLElement
+                                    if (checkboxCell) {
+                                      checkboxCell.style.background = '#f5f5f5'
+                                    }
+                                  }
+                                }
+                          }
+                          onMouseLeave={
+                            isMobile
+                              ? undefined
+                              : (e) => {
+                                  if (!isSelected) {
+                                    e.currentTarget.style.background = 'white'
+                                    // Checkbox sütununun background rəngini də yenilə
+                                    const checkboxCell = e.currentTarget.querySelector(
+                                      'td[data-column-key="checkbox"]',
+                                    ) as HTMLElement
+                                    if (checkboxCell) {
+                                      checkboxCell.style.background = 'white'
+                                    }
+                                  }
+                                }
+                          }
                         >
                           {columnOrder.map((columnKey) => {
                             const config = columnConfig[columnKey]
@@ -3658,6 +3816,11 @@ export default function Alicilar() {
                               )
                             } else if (isRowNumber) {
                               cellContent = filteredProducts.indexOf(product) + 1
+                            } else if (columnKey === 'id') {
+                              // Cədvəldə ID-ni Malın ID-si formatında göstər (M00000001 və s.)
+                              cellStyle.color = '#666'
+                              cellStyle.fontFamily = 'monospace'
+                              cellContent = product.id != null ? `M${product.id.toString().padStart(8, '0')}` : '-'
                             } else if (columnKey === 'code') {
                               cellStyle.color = '#666'
                               cellStyle.fontFamily = 'monospace'
@@ -3665,19 +3828,40 @@ export default function Alicilar() {
                             } else if (columnKey === 'name') {
                               cellStyle.fontWeight = isSelected ? 'bold' : 'normal'
                               cellContent = product.name
-                            } else if (columnKey === 'phone') {
+                            } else if (columnKey === 'barcode') {
                               cellStyle.color = '#666'
-                              cellContent = product.phone || '-'
-                            } else if (columnKey === 'folder') {
-                              cellStyle.color = product.folder_id ? '#1976d2' : '#666'
-                              cellStyle.cursor = product.folder_id ? 'pointer' : 'default'
-                              cellStyle.textDecoration = product.folder_id ? 'underline' : 'none'
-                              cellContent = getFolderNameForProduct(product.folder_id)
-                            } else if (columnKey === 'balance') {
+                              cellStyle.fontFamily = 'monospace'
+                              cellContent = product.barcode || '-'
+                            } else if (columnKey === 'unit') {
+                              cellStyle.color = '#666'
+                              cellContent = product.unit || 'ədəd'
+                            } else if (columnKey === 'purchase_price') {
+                              const value =
+                                product.purchase_price !== null && product.purchase_price !== undefined
+                                  ? Number(product.purchase_price)
+                                  : 0
+                              cellStyle.textAlign = 'right'
+                              cellContent = `${isNaN(value) ? '0.00' : value.toFixed(2)} ₼`
+                            } else if (columnKey === 'sale_price') {
+                              const value =
+                                product.sale_price !== null && product.sale_price !== undefined
+                                  ? Number(product.sale_price)
+                                  : 0
+                              cellStyle.textAlign = 'right'
+                              cellContent = `${isNaN(value) ? '0.00' : value.toFixed(2)} ₼`
+                            } else if (columnKey === 'quantity') {
+                              const qty = getQuantityForProduct(product)
+                              cellStyle.textAlign = 'right'
+                              cellContent = qty
+                            } else if (columnKey === 'purchase_total') {
+                              const total = getPurchaseTotalForProduct(product)
+                              cellStyle.textAlign = 'right'
+                              cellContent = `${total.toFixed(2)} ₼`
+                            } else if (columnKey === 'sale_total') {
+                              const total = getSaleTotalForProduct(product)
+                              cellStyle.textAlign = 'right'
                               cellStyle.fontWeight = 'bold'
-                              cellStyle.color = product.balance && product.balance < 0 ? '#d32f2f' : '#2e7d32'
-                              cellContent = product.balance !== null ? Number(product.balance).toFixed(2) : '0.00'
-                              cellContent = `${cellContent} ₼`
+                              cellContent = `${total.toFixed(2)} ₼`
                             }
 
                             return (
@@ -3685,23 +3869,6 @@ export default function Alicilar() {
                                 key={columnKey}
                                 data-column-key={columnKey}
                                 style={cellStyle}
-                                onClick={columnKey === 'folder' && product.folder_id ? (e) => {
-                                  e.stopPropagation()
-                                  setSelectedFolder(product.folder_id ?? null)
-                                  setSelectedIds(new Set())
-                                  if (folderViewMode === 'accordion') {
-                                    setFolderOpen(true)
-                                  }
-                                } : undefined}
-                                onContextMenu={columnKey === 'folder' && product.folder_id ? (e) => {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                  setContextMenu({
-                                    x: e.clientX,
-                                    y: e.clientY,
-                                    folderId: product.folder_id ?? null,
-                                  })
-                                } : undefined}
                               >
                                 {cellContent}
                               </td>
@@ -3711,50 +3878,79 @@ export default function Alicilar() {
                       )
                     })}
                   </tbody>
+                  {/* Cədvəl alt cəmi üçün footer sətri – eyni cədvəl daxilində, sütunlara yapışıq */}
+                  <tfoot>
+                    <tr>
+                      {columnOrder.map((columnKey) => {
+                        if (!columnVisibility[columnKey]) return null
+                        const config = columnConfig[columnKey]
+                        const width = columnWidths[columnKey] || 80
+
+                        const cellStyle: React.CSSProperties = {
+                          padding: '0.5rem',
+                          borderTop: '1px solid #e0e0e0',
+                          borderRight: columnKey !== 'sale_total' ? '1px solid #e0e0e0' : 'none',
+                          textAlign: config?.align || 'left',
+                          minWidth: width,
+                          maxWidth: width,
+                          fontSize: '0.85rem',
+                          background: '#f5f5f5',
+                          fontWeight:
+                            columnKey === 'quantity' || columnKey === 'purchase_total' || columnKey === 'sale_total'
+                              ? 'bold'
+                              : 500,
+                          color:
+                            columnKey === 'quantity'
+                              ? '#ff9800'
+                              : columnKey === 'purchase_total'
+                              ? '#4caf50'
+                              : columnKey === 'sale_total'
+                              ? '#1976d2'
+                              : '#555',
+                          position: 'sticky',
+                          bottom: 0,
+                          zIndex: 8,
+                        }
+
+                        let content: React.ReactNode = ''
+
+                        if (columnKey === 'name') {
+                          content = `Cəmi (${totalVisibleCount} sətir)`
+                          cellStyle.textAlign = 'left'
+                          cellStyle.fontWeight = 600
+                          cellStyle.color = '#333'
+                        } else if (columnKey === 'quantity') {
+                          cellStyle.textAlign = 'right'
+                          content = totalVisibleQuantity.toFixed(2)
+                        } else if (columnKey === 'purchase_total') {
+                          cellStyle.textAlign = 'right'
+                          content = `${totalVisiblePurchaseTotal.toFixed(2)} ₼`
+                        } else if (columnKey === 'sale_total') {
+                          cellStyle.textAlign = 'right'
+                          content = `${totalVisibleSaleTotal.toFixed(2)} ₼`
+                        } else {
+                          content = ''
+                        }
+
+                        return (
+                          <td key={`footer-${columnKey}`} style={cellStyle}>
+                            {content}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  </tfoot>
                 </table>
-                </div>
-                {/* Cədvəl summary footeri */}
-                <div
-                  style={{
-                    flexShrink: 0,
-                    marginTop: 0,
-                    borderTop: '1px solid #e0e0e0',
-                    background: '#fafafa',
-                    padding: '0.5rem 0.75rem',
-                    fontSize: '0.8rem',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: '1rem',
-                    color: '#333',
-                  }}
-                >
-                  <div>
-                    <strong>Sıra sayı:</strong>{' '}
-                    {totalSelectedCount > 0
-                      ? `${totalSelectedCount} seçildi / ${totalVisibleCount} cəmi`
-                      : `${totalVisibleCount} sətir`}
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div>
-                      <strong>Görünən balans cəmi:</strong>{' '}
-                      {totalVisibleBalance.toFixed(2)} ₼
-                    </div>
-                    {totalSelectedCount > 0 && (
-                      <div>
-                        <strong>Seçilən balans cəmi:</strong>{' '}
-                        {totalSelectedBalance.toFixed(2)} ₼
-                      </div>
-                    )}
-                  </div>
-                </div>
               </div>
-            )}
-          </div>
-            )}
-          </div>
-        )}
+              </div>
+              )}
+            </div>
+          )}
         </div>
-      </div>
+          )}
+
+        {/* Cədvəl və Papka Paneli konteynerinin bağlanması */}
+        </div>
 
       {/* Papka əlavə et modal */}
       {addFolderModalOpen && (
@@ -3903,7 +4099,7 @@ export default function Alicilar() {
             top: isMobile ? '56px' : 0, // Mobil üçün top navbar hündürlüyü
             left: 0,
             right: 0,
-            bottom: isMobile ? '60px' : 0, // Mobil üçün bottom navbar hündürlüyü
+            bottom: 0, // Tam ekran – altda cədvəl / footer görünməsin
             background: 'rgba(0, 0, 0, 0.35)',
             // Altdakı səhifəni bulanıq göstərmək üçün
             backdropFilter: 'blur(4px)',
@@ -3939,148 +4135,535 @@ export default function Alicilar() {
               {editingProductId !== null ? 'Məhsulu redaktə et' : 'Yeni məhsul əlavə et'}
             </h2>
 
-            {/* Məhsul adı */}
-            <div style={{ marginBottom: '1rem' }}>
-              <input
-                type="text"
-                value={newProduct.name}
-                onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
-                placeholder="Məhsul adı *"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                    handleSaveProduct()
-                  } else if (e.key === 'Escape') {
-                    setAddProductModalOpen(false)
-                    setEditingProductId(null)
-                    setNewProduct({
-                      code: '',
-                      name: '',
-                      phone: '',
-                      email: '',
-                      address: '',
-                      folder_id: selectedFolder,
-                      article: '',
-                      barcode: '',
-                      description: '',
-                      unit: 'ədəd',
-                      purchase_price: '',
-                      sale_price: '',
-                      type: '',
-                      brand: '',
-                      model: '',
-                      color: '',
-                      country: '',
-                      manufacturer: '',
-                      production_date: '',
-                      expiry_date: '',
-                    })
-                  }
-                }}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  fontSize: '1rem',
-                  border: '1px solid #ddd',
-                  borderRadius: '6px',
-                  minHeight: '44px',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-
-            {/* Kod və artikul yan-yana */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
-              <div>
-                <input
-                  type="text"
-                  value={newProduct.code}
-                  onChange={(e) => setNewProduct({ ...newProduct, code: e.target.value })}
-                  placeholder="Kod (avtomatik ola bilər)"
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    fontSize: '1rem',
-                    border: '1px solid #ddd',
-                    borderRadius: '6px',
-                    minHeight: '44px',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-              <div>
-                <input
-                  type="text"
-                  value={newProduct.article}
-                  onChange={(e) => setNewProduct({ ...newProduct, article: e.target.value })}
-                  placeholder="Artikul"
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    fontSize: '1rem',
-                    border: '1px solid #ddd',
-                    borderRadius: '6px',
-                    minHeight: '44px',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Barkod və oxuma düymələri */}
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-              <input
-                type="text"
-                value={newProduct.barcode}
-                onChange={(e) => setNewProduct({ ...newProduct, barcode: e.target.value })}
-                placeholder="Barkod"
+            {/* Tablar: Əsas / Malın IDS-i */}
+            <div
+              style={{
+                display: 'flex',
+                marginBottom: '1rem',
+                borderBottom: '1px solid #eee',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setProductModalTab('basic')}
                 style={{
                   flex: 1,
-                  padding: '0.75rem',
-                  fontSize: '1rem',
-                  border: '1px solid #ddd',
-                  borderRadius: '6px',
-                  minHeight: '44px',
-                  boxSizing: 'border-box',
-                }}
-              />
-              <button
-                type="button"
-                onClick={handleBarcodeScanFromCamera}
-                style={{
-                  padding: '0.75rem',
-                  background: '#17a2b8',
-                  color: 'white',
+                  padding: '0.5rem 0.75rem',
                   border: 'none',
-                  borderRadius: '6px',
-                  minHeight: '44px',
+                  borderBottom: productModalTab === 'basic' ? '3px solid #1976d2' : '3px solid transparent',
+                  background: 'transparent',
+                  color: productModalTab === 'basic' ? '#1976d2' : '#555',
+                  fontWeight: productModalTab === 'basic' ? 600 : 500,
                   cursor: 'pointer',
-                  fontSize: '1.2rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  fontSize: '0.95rem',
                 }}
               >
-                📷
+                Əsas məlumatlar
               </button>
               <button
                 type="button"
-                onClick={handleBarcodeScanFromGallery}
+                onClick={() => setProductModalTab('details')}
                 style={{
-                  padding: '0.75rem',
-                  background: '#4caf50',
-                  color: 'white',
+                  flex: 1,
+                  padding: '0.5rem 0.75rem',
                   border: 'none',
-                  borderRadius: '6px',
-                  minHeight: '44px',
+                  borderBottom: productModalTab === 'details' ? '3px solid #1976d2' : '3px solid transparent',
+                  background: 'transparent',
+                  color: productModalTab === 'details' ? '#1976d2' : '#555',
+                  fontWeight: productModalTab === 'details' ? 600 : 500,
                   cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  whiteSpace: 'nowrap',
+                  fontSize: '0.95rem',
                 }}
               >
-                Qalereya
+                Malın IDS-i
               </button>
             </div>
+
+            {productModalTab === 'basic' && (
+              <>
+                {/* Məhsul adı */}
+                <div style={{ marginBottom: '1rem' }}>
+                  <input
+                    type="text"
+                    value={newProduct.name}
+                    onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
+                    placeholder="Məhsul adı *"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                        handleSaveProduct()
+                      } else if (e.key === 'Escape') {
+                        setAddProductModalOpen(false)
+                        setEditingProductId(null)
+                        setNewProduct({
+                          code: '',
+                          name: '',
+                          phone: '',
+                          email: '',
+                          address: '',
+                          folder_id: selectedFolder,
+                          article: '',
+                          barcode: '',
+                          description: '',
+                          unit: 'ədəd',
+                          purchase_price: '',
+                          sale_price: '',
+                          type: '',
+                          brand: '',
+                          model: '',
+                          color: '',
+                          country: '',
+                          manufacturer: '',
+                          production_date: '',
+                          expiry_date: '',
+                        })
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      fontSize: '1rem',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      minHeight: '44px',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                {/* Kod və artikul yan-yana */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '0.75rem',
+                    marginBottom: '1rem',
+                  }}
+                >
+                  <div>
+                    <input
+                      type="text"
+                      value={newProduct.code}
+                      onChange={(e) => setNewProduct({ ...newProduct, code: e.target.value })}
+                      placeholder="Kod (avtomatik ola bilər)"
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        fontSize: '1rem',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        minHeight: '44px',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      value={newProduct.article}
+                      onChange={(e) => setNewProduct({ ...newProduct, article: e.target.value })}
+                      placeholder="Artikul"
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        fontSize: '1rem',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        minHeight: '44px',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Barkod və oxuma düymələri */}
+                <div style={{ marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <input
+                      type="text"
+                      value={newProduct.barcode}
+                      onChange={(e) => handleBarcodeChange(e.target.value)}
+                      placeholder="Barkod"
+                      style={{
+                        flex: 1,
+                        padding: '0.75rem',
+                        fontSize: '1rem',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        minHeight: '44px',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleBarcodeScanFromCamera}
+                      style={{
+                        padding: '0.75rem',
+                        background: '#17a2b8',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        minHeight: '44px',
+                        cursor: 'pointer',
+                        fontSize: '1.2rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      📷
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBarcodeOptionsClick}
+                      style={{
+                        padding: '0.75rem',
+                        background: '#4caf50',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        minHeight: '44px',
+                        cursor: 'pointer',
+                        fontSize: '1.2rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      |||
+                    </button>
+                  </div>
+
+                  {barcodeOptionsOpen && (
+                    <div
+                      style={{
+                        marginTop: '0.5rem',
+                        display: 'flex',
+                        gap: '0.5rem',
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={handleBarcodeOptionGallery}
+                        style={{
+                          flex: 1,
+                          padding: '0.6rem 0.75rem',
+                          background: '#4caf50',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '0.95rem',
+                        }}
+                      >
+                        Qalereyadan oxut
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleBarcodeOptionAuto}
+                        style={{
+                          flex: 1,
+                          padding: '0.6rem 0.75rem',
+                          background: '#2196f3',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '0.95rem',
+                        }}
+                      >
+                        Avto barkod
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Təsvir */}
+                <div style={{ marginBottom: '1rem' }}>
+                  <textarea
+                    value={newProduct.description}
+                    onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
+                    placeholder="Məhsul təsviri"
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      fontSize: '1rem',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      resize: 'vertical',
+                      fontFamily: 'inherit',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                {/* Vahid və qiymətlər */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr 1fr',
+                    gap: '0.75rem',
+                    marginBottom: '1rem',
+                  }}
+                >
+                  <div>
+                    <select
+                      value={newProduct.unit}
+                      onChange={(e) => setNewProduct({ ...newProduct, unit: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        fontSize: '1rem',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        minHeight: '44px',
+                        boxSizing: 'border-box',
+                        background: 'white',
+                      }}
+                    >
+                      <option value="ədəd">ədəd</option>
+                      <option value="kq">kq</option>
+                      <option value="litr">litr</option>
+                      <option value="metr">metr</option>
+                      <option value="dəst">dəst</option>
+                      <option value="qutu">qutu</option>
+                    </select>
+                  </div>
+                  <div>
+                    <input
+                      type="number"
+                      value={newProduct.purchase_price}
+                      onChange={(e) => setNewProduct({ ...newProduct, purchase_price: e.target.value })}
+                      placeholder="Alış qiyməti"
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        fontSize: '1rem',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        minHeight: '44px',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="number"
+                      value={newProduct.sale_price}
+                      onChange={(e) => setNewProduct({ ...newProduct, sale_price: e.target.value })}
+                      placeholder="Satış qiyməti"
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        fontSize: '1rem',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        minHeight: '44px',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {productModalTab === 'details' && (
+              <>
+                {/* Malın IDS-i və əlavə məlumatlar */}
+                <div style={{ marginBottom: '1rem' }}>
+                  <input
+                    type="text"
+                    value={
+                      editingProductId !== null
+                        ? `M${editingProductId.toString().padStart(8, '0')}`
+                        : ''
+                    }
+                    readOnly
+                    placeholder="Malın ID-si (M00000001 ...) yadda saxlayanda avtomatik veriləcək"
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      fontSize: '1rem',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      minHeight: '44px',
+                      boxSizing: 'border-box',
+                      background: '#f9f9f9',
+                      color: '#555',
+                    }}
+                  />
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '0.75rem',
+                    marginBottom: '0.75rem',
+                  }}
+                >
+                  <div>
+                    <input
+                      type="text"
+                      value={newProduct.type}
+                      onChange={(e) => setNewProduct({ ...newProduct, type: e.target.value })}
+                      placeholder="Növ/Tip"
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        fontSize: '1rem',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        minHeight: '44px',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      value={newProduct.brand}
+                      onChange={(e) => setNewProduct({ ...newProduct, brand: e.target.value })}
+                      placeholder="Marka"
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        fontSize: '1rem',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        minHeight: '44px',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '0.75rem',
+                    marginBottom: '0.75rem',
+                  }}
+                >
+                  <div>
+                    <input
+                      type="text"
+                      value={newProduct.model}
+                      onChange={(e) => setNewProduct({ ...newProduct, model: e.target.value })}
+                      placeholder="Model"
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        fontSize: '1rem',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        minHeight: '44px',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      value={newProduct.color}
+                      onChange={(e) => setNewProduct({ ...newProduct, color: e.target.value })}
+                      placeholder="Rəng"
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        fontSize: '1rem',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        minHeight: '44px',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <input
+                    type="text"
+                    value={newProduct.country}
+                    onChange={(e) => setNewProduct({ ...newProduct, country: e.target.value })}
+                    placeholder="Ölkə"
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      fontSize: '1rem',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      minHeight: '44px',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <input
+                    type="text"
+                    value={newProduct.manufacturer}
+                    onChange={(e) => setNewProduct({ ...newProduct, manufacturer: e.target.value })}
+                    placeholder="İstehsalçı"
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      fontSize: '1rem',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      minHeight: '44px',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '0.75rem',
+                    marginBottom: '1rem',
+                  }}
+                >
+                  <div>
+                    <input
+                      type="date"
+                      value={newProduct.production_date}
+                      onChange={(e) => setNewProduct({ ...newProduct, production_date: e.target.value })}
+                      placeholder="İstehsal tarixi"
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        fontSize: '1rem',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        minHeight: '44px',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="date"
+                      value={newProduct.expiry_date}
+                      onChange={(e) => setNewProduct({ ...newProduct, expiry_date: e.target.value })}
+                      placeholder="Bitmə tarixi"
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        fontSize: '1rem',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        minHeight: '44px',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
             <div
               style={{
@@ -4117,32 +4700,17 @@ export default function Alicilar() {
               </button>
             </div>
 
-            {/* Təsvir */}
-            <div style={{ marginBottom: '1rem' }}>
-              <textarea
-                value={newProduct.description}
-                onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
-                placeholder="Məhsul təsviri"
-                rows={3}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  fontSize: '1rem',
-                  border: '1px solid #ddd',
-                  borderRadius: '6px',
-                  resize: 'vertical',
-                  fontFamily: 'inherit',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-
-            {/* Vahid və qiymətlər */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
-              <div>
+            {/* Papka (kateqoriya) seçimi – yalnız Əsas məlumatlar tabında göstər */}
+            {productModalTab === 'basic' && (
+              <div style={{ marginBottom: '1rem' }}>
                 <select
-                  value={newProduct.unit}
-                  onChange={(e) => setNewProduct({ ...newProduct, unit: e.target.value })}
+                  value={newProduct.folder_id || ''}
+                  onChange={(e) =>
+                    setNewProduct({
+                      ...newProduct,
+                      folder_id: e.target.value ? parseInt(e.target.value) : null,
+                    })
+                  }
                   style={{
                     width: '100%',
                     padding: '0.75rem',
@@ -4152,92 +4720,36 @@ export default function Alicilar() {
                     minHeight: '44px',
                     boxSizing: 'border-box',
                     background: 'white',
+                    cursor: 'pointer',
+                    color: newProduct.folder_id ? 'inherit' : '#999',
                   }}
                 >
-                  <option value="ədəd">ədəd</option>
-                  <option value="kq">kq</option>
-                  <option value="litr">litr</option>
-                  <option value="metr">metr</option>
-                  <option value="dəst">dəst</option>
-                  <option value="qutu">qutu</option>
+                  <option value="" style={{ color: '#999' }}>
+                    Papka (kateqoriya)
+                  </option>
+                  {(() => {
+                    const folderTree = buildFolderTree(folders)
+                    const renderFolderOptions = (folderList: Folder[], level: number = 0): React.ReactNode[] => {
+                      const options: React.ReactNode[] = []
+                      folderList.forEach(folder => {
+                        const indent = '  '.repeat(level)
+                        options.push(
+                          <option key={folder.id} value={folder.id}>
+                            {indent}
+                            {folder.name}
+                          </option>,
+                        )
+                        if (folder.children && folder.children.length > 0) {
+                          options.push(...renderFolderOptions(folder.children, level + 1))
+                        }
+                      })
+                      return options
+                    }
+                    return renderFolderOptions(folderTree)
+                  })()}
                 </select>
               </div>
-              <div>
-                <input
-                  type="number"
-                  value={newProduct.purchase_price}
-                  onChange={(e) => setNewProduct({ ...newProduct, purchase_price: e.target.value })}
-                  placeholder="Alış qiyməti"
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    fontSize: '1rem',
-                    border: '1px solid #ddd',
-                    borderRadius: '6px',
-                    minHeight: '44px',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-              <div>
-                <input
-                  type="number"
-                  value={newProduct.sale_price}
-                  onChange={(e) => setNewProduct({ ...newProduct, sale_price: e.target.value })}
-                  placeholder="Satış qiyməti"
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    fontSize: '1rem',
-                    border: '1px solid #ddd',
-                    borderRadius: '6px',
-                    minHeight: '44px',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Papka (kateqoriya) seçimi */}
-            <div style={{ marginBottom: '1rem' }}>
-              <select
-                value={newProduct.folder_id || ''}
-                onChange={(e) => setNewProduct({ ...newProduct, folder_id: e.target.value ? parseInt(e.target.value) : null })}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  fontSize: '1rem',
-                  border: '1px solid #ddd',
-                  borderRadius: '6px',
-                  minHeight: '44px',
-                  boxSizing: 'border-box',
-                  background: 'white',
-                  cursor: 'pointer',
-                  color: newProduct.folder_id ? 'inherit' : '#999',
-                }}
-              >
-                <option value="" style={{ color: '#999' }}>Papka (kateqoriya)</option>
-                {(() => {
-                  const folderTree = buildFolderTree(folders)
-                  const renderFolderOptions = (folderList: Folder[], level: number = 0): React.ReactNode[] => {
-                    const options: React.ReactNode[] = []
-                    folderList.forEach(folder => {
-                      const indent = '  '.repeat(level)
-                      options.push(
-                        <option key={folder.id} value={folder.id}>
-                          {indent}{folder.name}
-                        </option>
-                      )
-                      if (folder.children && folder.children.length > 0) {
-                        options.push(...renderFolderOptions(folder.children, level + 1))
-                      }
-                    })
-                    return options
-                  }
-                  return renderFolderOptions(folderTree)
-                })()}
-              </select>
-            </div>
+            )}
 
             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'space-between', marginTop: '1.5rem', flexWrap: 'nowrap' }}>
               <button
@@ -4340,6 +4852,16 @@ export default function Alicilar() {
         </div>
       )}
 
+      {/* Şəkildən barkod oxu üçün crop modalı */}
+      <BarcodeImageCropper
+        open={imageCropOpen}
+        file={imageCropFile}
+        onClose={() => setImageCropOpen(false)}
+        onDetected={(code) => {
+          setNewProduct((prev) => ({ ...prev, barcode: code }))
+        }}
+      />
+
       {/* Ayarlar Modal */}
       {settingsModalOpen && (
         <div
@@ -4353,7 +4875,7 @@ export default function Alicilar() {
             top: isMobile ? '56px' : 0, // Mobil üçün top navbar hündürlüyü
             left: 0,
             right: 0,
-            bottom: isMobile ? '60px' : 0, // Mobil üçün bottom navbar hündürlüyü
+            bottom: 0, // Tam ekrana qədər uzansın ki, altdakı cədvəl görünməsin
             background: 'rgba(0, 0, 0, 0.5)',
             zIndex: 10000,
             display: 'flex',
@@ -4557,7 +5079,15 @@ export default function Alicilar() {
                                 </div>
                               </td>
                               <td style={{ padding: '0.75rem', textAlign: 'center' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'center' }}>
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    flexDirection: 'row',
+                                    gap: '0.25rem',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                  }}
+                                >
                                   <button
                                     onClick={() => handleMoveColumn(columnKey, 'up')}
                                     disabled={isFirst}
@@ -4566,17 +5096,18 @@ export default function Alicilar() {
                                       color: isFirst ? '#ccc' : 'white',
                                       border: 'none',
                                       borderRadius: '4px',
-                                      width: '28px',
+                                      width: '24px',
                                       height: '24px',
                                       cursor: isFirst ? 'not-allowed' : 'pointer',
-                                      fontSize: '0.75rem',
+                                      fontSize: '0.7rem',
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'center',
                                       opacity: isFirst ? 0.5 : 1,
+                                      padding: 0,
                                     }}
                                   >
-                                    ▲
+                                    ↑
                                   </button>
                                   <button
                                     onClick={() => handleMoveColumn(columnKey, 'down')}
@@ -4586,17 +5117,18 @@ export default function Alicilar() {
                                       color: isLast ? '#ccc' : 'white',
                                       border: 'none',
                                       borderRadius: '4px',
-                                      width: '28px',
+                                      width: '24px',
                                       height: '24px',
                                       cursor: isLast ? 'not-allowed' : 'pointer',
-                                      fontSize: '0.75rem',
+                                      fontSize: '0.7rem',
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'center',
                                       opacity: isLast ? 0.5 : 1,
+                                      padding: 0,
                                     }}
                                   >
-                                    ▼
+                                    ↓
                                   </button>
                                 </div>
                               </td>
@@ -4816,10 +5348,12 @@ export default function Alicilar() {
             {/* Modal Footer */}
             <div
               style={{
-                padding: '1rem 1.5rem',
+                padding: '0.85rem 1.5rem',
                 borderTop: '1px solid #e0e0e0',
                 display: 'flex',
                 justifyContent: 'flex-end',
+                background: '#f7f7f9', // Kontentdən bir az fərqli fon – pəncərənin alt hissəsi kimi hiss olunsun
+                boxShadow: '0 -2px 4px rgba(0,0,0,0.04)', // Yuxarıya yüngül kölgə
               }}
             >
               <button
@@ -4916,6 +5450,7 @@ export default function Alicilar() {
           onClose={() => setToast(null)}
         />
       )}
+      </div>
     </Layout>
   )
 }

@@ -12,6 +12,7 @@ import KassaMedaxil from './pages/Kassa/Medaxil'
 import KassaMexaric from './pages/Kassa/Mexaric'
 import Alicilar from './pages/Musteriler/Alici'
 import Saticilar from './pages/Musteriler/Satici'
+import DebugLogs from './pages/DebugLogs'
 import ProtectedRoute from './components/ProtectedRoute'
 
 const basename = import.meta.env.DEV ? '/' : '/mobil'
@@ -106,6 +107,15 @@ function App() {
           element={
             <ProtectedRoute>
               <Profile />
+            </ProtectedRoute>
+          }
+        />
+        {/* Debug log pəncərəsi – yalnız admin/debug üçün, amma auth tələb olunur */}
+        <Route
+          path="/debug-logs"
+          element={
+            <ProtectedRoute>
+              <DebugLogs />
             </ProtectedRoute>
           }
         />
