@@ -128,7 +128,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       })
 
       await Promise.all(
-        normalizedItems.map((item) =>
+        normalizedItems.map((item: { product_id: number; quantity: number; unit_price: number; total_price: number }) =>
           tx.sale_invoice_items.create({
             data: {
               invoice_id: invoice.id,
