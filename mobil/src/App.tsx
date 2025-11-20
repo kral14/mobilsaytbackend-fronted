@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Home from './pages/Home'
 import Products from './pages/Products'
 import Login from './pages/Login'
@@ -14,9 +14,12 @@ import Alicilar from './pages/Musteriler/Alici'
 import Saticilar from './pages/Musteriler/Satici'
 import ProtectedRoute from './components/ProtectedRoute'
 
+const basename = import.meta.env.DEV ? '/' : '/mobil'
+
 function App() {
   return (
     <BrowserRouter
+      basename={basename}
       future={{
         v7_startTransition: true,
         v7_relativeSplatPath: true,
@@ -106,6 +109,8 @@ function App() {
             </ProtectedRoute>
           }
         />
+        {/* Uyğun gəlməyən bütün path-ləri ana səhifəyə yönləndir */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   )

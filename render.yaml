@@ -70,7 +70,26 @@ services:
           const isWebPath = path.startsWith('/web');
           
           const buildUrl = (basePath) => {
-            return basePath + path + window.location.search + window.location.hash;
+            let newPath = path;
+
+            // Eyni prefix-i iki dəfə əlavə etməmək və /web, /mobil kimi prefix-ləri normallaşdırmaq
+            if (basePath === '/mobil') {
+              if (newPath.startsWith('/mobil')) {
+                newPath = newPath.replace(/^\/mobil/, '');
+              }
+              if (newPath.startsWith('/web')) {
+                newPath = newPath.replace(/^\/web/, '');
+              }
+            } else if (basePath === '/web') {
+              if (newPath.startsWith('/web')) {
+                newPath = newPath.replace(/^\/web/, '');
+              }
+              if (newPath.startsWith('/mobil')) {
+                newPath = newPath.replace(/^\/mobil/, '');
+              }
+            }
+
+            return basePath + newPath + window.location.search + window.location.hash;
           };
 
           if (isMobileDomain) {
