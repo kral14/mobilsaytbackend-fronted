@@ -7,6 +7,17 @@ export const register = async (req: Request, res: Response) => {
   try {
     const { email, password, name, phone } = req.body
 
+    console.log('👤 [AUTH] Register cəhdi:', {
+      email,
+      hasPassword: !!password,
+      name,
+      phone,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      origin: req.headers.origin,
+      referer: req.headers.referer || req.headers.referrer,
+    })
+
     // Email yoxla
     const existingUser = await prisma.users.findUnique({
       where: { email },
@@ -42,6 +53,12 @@ export const register = async (req: Request, res: Response) => {
     // Token yarat
     const token = generateToken(user.id.toString())
 
+    console.log('✅ [AUTH] Register uğurlu:', {
+      userId: user.id,
+      email: user.email,
+      customerId: customer?.id,
+    })
+
     res.status(201).json({
       token,
       user: {
@@ -57,7 +74,7 @@ export const register = async (req: Request, res: Response) => {
       } : null,
     })
   } catch (error) {
-    console.error('Register error:', error)
+    console.error('❌ [AUTH] Register error:', error)
     res.status(500).json({ message: 'Qeydiyyat zamanı xəta baş verdi' })
   }
 }
@@ -66,12 +83,22 @@ export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body
 
+    console.log('👤 [AUTH] Login cəhdi:', {
+      email,
+      hasPassword: !!password,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      origin: req.headers.origin,
+      referer: req.headers.referer || req.headers.referrer,
+    })
+
     // İstifadəçini tap
     const user = await prisma.users.findUnique({
       where: { email },
     })
 
     if (!user) {
+      console.warn('⚠️ [AUTH] Login uğursuz - istifadəçi tapılmadı:', { email })
       return res.status(401).json({ message: 'Email və ya şifrə yanlışdır' })
     }
 
@@ -79,6 +106,7 @@ export const login = async (req: Request, res: Response) => {
     const isPasswordValid = await comparePassword(password, user.password)
 
     if (!isPasswordValid) {
+      console.warn('⚠️ [AUTH] Login uğursuz - şifrə yanlışdır:', { email, userId: user.id })
       return res.status(401).json({ message: 'Email və ya şifrə yanlışdır' })
     }
 
@@ -89,6 +117,12 @@ export const login = async (req: Request, res: Response) => {
 
     // Token yarat
     const token = generateToken(user.id.toString())
+
+    console.log('✅ [AUTH] Login uğurlu:', {
+      userId: user.id,
+      email: user.email,
+      customerId: customer?.id,
+    })
 
     res.json({
       token,
@@ -107,7 +141,7 @@ export const login = async (req: Request, res: Response) => {
       } : null,
     })
   } catch (error) {
-    console.error('Login error:', error)
+    console.error('❌ [AUTH] Login error:', error)
     res.status(500).json({ message: 'Giriş zamanı xəta baş verdi' })
   }
 }

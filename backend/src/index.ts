@@ -68,11 +68,13 @@ const corsOptions: cors.CorsOptions = {
     }
 
     if (isWhitelisted || isRenderMobilsayt) {
+      console.log('✅ [CORS] Origin icazəlidir:', origin)
       return callback(null, true)
     }
 
     // Development mühitində bütün origin-lərə icazə ver (debug üçün)
     if (process.env.NODE_ENV === 'development') {
+      console.log('✅ [CORS] Development mühiti - bütün origin-lərə icazə verilir:', origin)
       return callback(null, true)
     }
 
@@ -92,6 +94,63 @@ app.use(cors(corsOptions))
 app.options('*', cors(corsOptions))
 
 app.use(express.json())
+
+// Gələn bütün request-lər üçün detallı log middleware-i
+app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const start = Date.now()
+  const { method, originalUrl, headers, query, body } = req
+
+  // Həssas məlumatları maskala
+  const safeHeaders: any = { ...headers }
+  if (safeHeaders.authorization) {
+    safeHeaders.authorization = '***redacted***'
+  }
+
+  const safeBody: any =
+    body && typeof body === 'object'
+      ? { ...body }
+      : body
+
+  if (safeBody && typeof safeBody === 'object') {
+    if (safeBody.password) safeBody.password = '***redacted***'
+    if (safeBody.oldPassword) safeBody.oldPassword = '***redacted***'
+    if (safeBody.newPassword) safeBody.newPassword = '***redacted***'
+  }
+
+  const clientIp =
+    (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+    req.socket.remoteAddress
+
+  console.log(
+    '📥 [REQUEST]',
+    JSON.stringify(
+      {
+        method,
+        url: originalUrl,
+        query,
+        body: safeBody,
+        headers: {
+          origin: headers.origin,
+          host: headers.host,
+          'user-agent': headers['user-agent'],
+          referer: headers.referer || headers.referrer,
+        },
+        ip: clientIp,
+      },
+      null,
+      2,
+    ),
+  )
+
+  res.on('finish', () => {
+    const duration = Date.now() - start
+    console.log(
+      `📤 [RESPONSE] ${method} ${originalUrl} -> ${res.statusCode} (${duration}ms)`,
+    )
+  })
+
+  next()
+})
 
 // Health check
 app.get('/api/health', (req, res) => {
