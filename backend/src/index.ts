@@ -120,7 +120,7 @@ const mobilDistPath = path.join(rootDir, 'mobil', 'dist')
 app.use('/web', express.static(webDistPath))
 app.use('/mobil', express.static(mobilDistPath))
 
-// Eyni linkdən (/) giriş zamanı cihaz növünə görə yönləndirmə
+// Eyni linkdən (/) giriş zamanı cihaz növünə görə /web və ya /mobil adresinə yönləndirmə
 app.get('/', (req, res) => {
   const userAgent = req.headers['user-agent'] || ''
 
@@ -128,11 +128,8 @@ app.get('/', (req, res) => {
     userAgent,
   )
 
-  const indexFile = isMobile
-    ? path.join(mobilDistPath, 'index.html')
-    : path.join(webDistPath, 'index.html')
-
-  res.sendFile(indexFile)
+  const target = isMobile ? '/mobil/' : '/web/'
+  res.redirect(target)
 })
 
 // React Router üçün fallback-lar (PC və Mobil üçün ayrıca)
