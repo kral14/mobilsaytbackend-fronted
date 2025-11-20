@@ -18,6 +18,8 @@ export async function scanBarcodeFromImage(file: File): Promise<string> {
   }
 
   const html5QrCode = new Html5Qrcode(containerId, {
+    // TS tiplərinə görə Html5QrcodeFullConfig içində `verbose` mütləqdir
+    verbose: false,
     // QR və ən çox istifadə olunan barkod formatlarını dəstəklə
     formatsToSupport: [
       Html5QrcodeSupportedFormats.QR_CODE,
@@ -27,7 +29,7 @@ export async function scanBarcodeFromImage(file: File): Promise<string> {
       Html5QrcodeSupportedFormats.UPC_A,
       Html5QrcodeSupportedFormats.UPC_E,
     ],
-  })
+  } as any)
 
   try {
     const decodedText = await html5QrCode.scanFile(file, false)

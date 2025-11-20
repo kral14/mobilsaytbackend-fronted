@@ -273,6 +273,7 @@ export default function Alicilar() {
       id: true,
       name: true,
       code: true,
+      article: true,
       barcode: true,
       unit: true,
       purchase_price: true,
@@ -329,6 +330,7 @@ export default function Alicilar() {
       'id',
       'name',
       'code',
+      'article',
       'barcode',
       'unit',
       'purchase_price',
@@ -357,6 +359,7 @@ export default function Alicilar() {
       id: 60,
       name: 200,
       code: 110,
+      article: 110,
       barcode: 150,
       unit: 80,
       purchase_price: 120,
@@ -743,6 +746,7 @@ export default function Alicilar() {
     id: { label: 'ID', align: 'center' },
     name: { label: 'Məhsul adı', align: 'left' },
     code: { label: 'Kod', align: 'left' },
+    article: { label: 'Artikul', align: 'left' },
     barcode: { label: 'Barkod', align: 'left' },
     unit: { label: 'Vahid', align: 'left' },
     purchase_price: { label: 'Alış qiyməti', align: 'right' },
@@ -765,6 +769,7 @@ export default function Alicilar() {
       'id',
       'name',
       'code',
+      'article',
       'barcode',
       'unit',
       'purchase_price',
@@ -779,6 +784,7 @@ export default function Alicilar() {
       id: 60,
       name: 200,
       code: 110,
+      article: 110,
       barcode: 150,
       unit: 80,
       purchase_price: 120,
@@ -793,6 +799,7 @@ export default function Alicilar() {
       id: true,
       name: true,
       code: true,
+      article: true,
       barcode: true,
       unit: true,
       purchase_price: true,
@@ -3825,6 +3832,10 @@ export default function Alicilar() {
                               cellStyle.color = '#666'
                               cellStyle.fontFamily = 'monospace'
                               cellContent = product.code || '-'
+                            } else if (columnKey === 'article') {
+                              cellStyle.color = '#666'
+                              cellStyle.fontFamily = 'monospace'
+                              cellContent = (product as any).article || '-'
                             } else if (columnKey === 'name') {
                               cellStyle.fontWeight = isSelected ? 'bold' : 'normal'
                               cellContent = product.name
