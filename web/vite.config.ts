@@ -4,7 +4,7 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
-  base: '/',
+  base: process.env.NODE_ENV === 'production' ? '/web/' : '/',
   resolve: {
     alias: {
       '@shared': path.resolve(__dirname, '../shared'),

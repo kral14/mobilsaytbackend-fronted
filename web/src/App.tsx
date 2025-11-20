@@ -14,9 +14,12 @@ import Alicilar from './pages/Musteriler/Alici'
 import Saticilar from './pages/Musteriler/Satici'
 import ProtectedRoute from './components/ProtectedRoute'
 
+const basename = import.meta.env.DEV ? '/' : '/web'
+
 function App() {
   return (
     <BrowserRouter
+      basename={basename}
       future={{
         v7_startTransition: true,
         v7_relativeSplatPath: true,

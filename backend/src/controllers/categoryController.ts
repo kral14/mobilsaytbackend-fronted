@@ -125,26 +125,11 @@ export const deleteCategory = async (req: AuthRequest, res: Response) => {
     console.log('🔍 [DEBUG] deleteCategory çağırıldı')
     const { id } = req.params
     
-    // Məhsulları bu kateqoriyadan çıxar (əgər category_id sütunu varsa)
-    try {
-      const columnCheck: any = await prisma.$queryRaw`
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_schema = 'public' 
-        AND table_name = 'products' 
-        AND column_name = 'category_id'
-        LIMIT 1
-      `
-      if (columnCheck && Array.isArray(columnCheck) && columnCheck.length > 0) {
-        await prisma.products.updateMany({
-          where: { category_id: parseInt(id) },
-          data: { category_id: null },
-        })
-      }
-    } catch (e) {
-      // category_id sütunu yoxdur, keç
-      console.log('⚠️ [WARN] category_id sütunu yoxdur, məhsullar köçürülmədi')
-    }
+    // Məhsulları bu kateqoriyadan çıxar
+    await prisma.products.updateMany({
+      where: { category_id: parseInt(id, 10) },
+      data: { category_id: null },
+    })
     
     // Alt kateqoriyaların parent_id-sini null et
     await prisma.categories.updateMany({

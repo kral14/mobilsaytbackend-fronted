@@ -8,63 +8,6 @@
     <meta name="theme-color" content="#1976d2" />
     <meta name="description" content="Mobil üçün optimizasiya edilmiş alış-satış idarəetmə sistemi" />
     <title>MobilSayt</title>
-    <script>
-      // Production üçün: ekran ölçüsünə görə web ↔ mobil domenləri arasında yönləndirmə
-      (function () {
-        function shouldRun() {
-          const host = window.location.hostname.toLowerCase()
-          // Yalnız Render domenlərində işləsin, localhost-da yox
-          return host.includes('mobilsayt-web') || host.includes('mobilsayt-mobil')
-        }
-
-        function isMobileDevice() {
-          const userAgentMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-            navigator.userAgent,
-          )
-          const screenWidth =
-            window.innerWidth || window.screen.width || document.documentElement.clientWidth
-          const screenHeight =
-            window.innerHeight || window.screen.height || document.documentElement.clientHeight
-
-          const isSmallScreen = screenWidth > 0 && screenWidth <= 768
-          return userAgentMobile || (isSmallScreen && screenHeight <= 1024)
-        }
-
-        function redirectIfNeeded() {
-          if (!shouldRun()) return
-
-          const host = window.location.hostname.toLowerCase()
-          const path = window.location.pathname + window.location.search + window.location.hash
-          const mobileUrl = 'https://mobilsayt-mobil.onrender.com' + path
-          const webUrl = 'https://mobilsayt-web.onrender.com' + path
-
-          const mobile = isMobileDevice()
-
-          // Web domenindəyiksə və cihaz mobil-disə → mobil domenə yönləndir
-          if (host.includes('mobilsayt-web') && mobile) {
-            window.location.href = mobileUrl
-            return
-          }
-
-          // Mobil domenindəyiksə və cihaz PC-disə → web domenə yönləndir
-          if (host.includes('mobilsayt-mobil') && !mobile) {
-            window.location.href = webUrl
-          }
-        }
-
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', redirectIfNeeded)
-        } else {
-          setTimeout(redirectIfNeeded, 50)
-        }
-
-        // Ekran ölçüsü dəyişəndə də yoxla
-        window.addEventListener('resize', function () {
-          clearTimeout(window.__mobilsaytResizeTimer)
-          window.__mobilsaytResizeTimer = setTimeout(redirectIfNeeded, 200)
-        })
-      })()
-    </script>
   </head>
   <body>
     <div id="root"></div>

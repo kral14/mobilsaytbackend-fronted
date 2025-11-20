@@ -1,10 +1,16 @@
 import { Router } from 'express'
 import prisma from '../config/database'
+import { authMiddleware } from '../middleware/auth'
 
 const router = Router()
 
-// Migration status yoxlamaq üçün test endpoint
+router.use(authMiddleware)
+
+// Migration status yalnız development/debug üçün
 router.get('/migration-status', async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ success: false, message: 'Endpoint deaktiv edilib' })
+  }
   try {
     const status: any = {
       categories_table: false,

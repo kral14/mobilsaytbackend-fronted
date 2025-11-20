@@ -3,7 +3,7 @@ import type { LoginRequest, RegisterRequest, AuthResponse, Product, SaleInvoice,
 
 // API URL-i müəyyən et
 const getApiBaseUrl = () => {
-  // Əgər environment variable varsa, onu istifadə et (Render üçün)
+  // Əgər environment variable varsa, onu istifadə et (deployment mühiti üçün)
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL
   }

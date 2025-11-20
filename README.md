@@ -73,74 +73,6 @@ cd mobil
 npm run dev
 ```
 
-## Render-də Deploy
-
-### 1. GitHub Repository-sinə Push Edin
-
-```bash
-git add .
-git commit -m "Initial commit"
-git remote add origin https://github.com/kral14/mobilsayt.git
-git push -u origin main
-```
-
-### 2. Render Dashboard-da Service-lər Yaradın
-
-#### Backend Service:
-1. Render dashboard-da "New +" → "Web Service" seçin
-2. GitHub repository-ni bağlayın
-3. Aşağıdakı konfiqurasiyanı təyin edin:
-   - **Name**: `mobilsayt-backend`
-   - **Environment**: `Node`
-   - **Build Command**: `cd backend && npm install && npx prisma generate && npm run build`
-   - **Start Command**: `cd backend && npm start`
-   - **Plan**: Free
-
-4. Environment Variables əlavə edin:
-   - `DATABASE_URL`: PostgreSQL connection string
-   - `JWT_SECRET`: JWT secret key
-   - `NODE_ENV`: `production`
-   - `PORT`: `5000` (Render avtomatik təyin edir, amma təyin edə bilərsiniz)
-
-#### Web Frontend Service:
-1. "New +" → "Static Site" seçin
-2. GitHub repository-ni bağlayın
-3. Konfiqurasiya:
-   - **Name**: `mobilsayt-web`
-   - **Build Command**: `cd web && npm install && npm run build`
-   - **Publish Directory**: `web/dist`
-
-4. Environment Variables (əgər lazımdırsa):
-   - `VITE_API_URL`: Backend URL (məsələn: `https://mobilsayt-backend.onrender.com`)
-
-#### Mobil Frontend Service:
-1. "New +" → "Static Site" seçin
-2. GitHub repository-ni bağlayın
-3. Konfiqurasiya:
-   - **Name**: `mobilsayt-mobil`
-   - **Build Command**: `cd mobil && npm install && npm run build`
-   - **Publish Directory**: `mobil/dist`
-
-4. Environment Variables (əgər lazımdırsa):
-   - `VITE_API_URL`: Backend URL
-
-### 3. Database
-
-Render-də PostgreSQL database yaradın:
-1. "New +" → "PostgreSQL" seçin
-2. Database yaradın və `DATABASE_URL`-i backend service-ə əlavə edin
-
-### 4. Prisma Migration
-
-Backend deploy olduqdan sonra, Prisma migration-ları işə salın:
-1. Render dashboard-da backend service-ə daxil olun
-2. "Shell" bölməsinə keçin
-3. Aşağıdakı komandaları işə salın:
-```bash
-cd backend
-npx prisma db push
-```
-
 ## API Endpoints
 
 - `GET /api/health` - Health check
@@ -159,4 +91,41 @@ npx prisma db push
 ## Lisenziya
 
 MIT
+
+## Render Free Plan-da Deploy (tək link, PC=web, telefon=mobil)
+
+**Məntiq:**  
+- Render-də **1 dənə Node Web Service** açırıq (backend).  
+- Build zamanı həm `web`, həm də `mobil` Vite layihələri build olunur (`web/dist`, `mobil/dist`).  
+- Backend (`backend/src/index.ts`) bu build olunmuş faylları static kimi serve edir və **root linkə (/) girəndə cihazın user-agent-inə görə**:
+  - PC brauzeridirsə `web` versiyasının `index.html`-ni,
+  - Telefon/planşetdirsə `mobil` versiyasının `index.html`-ni göndərir.
+
+### Addım-addım Render konfiqurasiyası
+
+1. **Repo-nu GitHub-a push et** (əgər etməmisənsə).
+2. Render hesabına gir, **New → Web Service** seç.
+3. Repository kimi bu layihəni seç.
+4. **Environment**: `Node`.
+5. **Build Command**: 
+   ```bash
+   npm run build
+   ```
+6. **Start Command**:
+   ```bash
+   npm start
+   ```
+7. **Environment Variables** bölməsində aşağıdakıları əlavə et:
+   - `DATABASE_URL` → PostgreSQL / Neon connection string
+   - `JWT_SECRET` → güclü random string
+   - `NODE_ENV` → `production`
+   - (istəsən) `PORT` → Render normalda özü təyin edir, dəyişməsən də olar.
+8. **Free plan** seç və servisi yarat.
+
+Deploy bitəndən sonra Render sənə bir URL verəcək, məsələn:  
+- `https://mobilsayt.onrender.com`
+
+Bu link:
+- **PC-dən girəndə** avtomatik `web` (desktop) versiyanı,
+- **telefondan girəndə** avtomatik `mobil` versiyanı açacaq. 
 

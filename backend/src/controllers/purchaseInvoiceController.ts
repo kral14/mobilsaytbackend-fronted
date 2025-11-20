@@ -61,106 +61,92 @@ export const createPurchaseInvoice = async (req: AuthRequest, res: Response) => 
       return res.status(400).json({ message: 'Məhsul seçilməlidir' })
     }
 
-    // Faktura nömrəsi yarat (ardıcıl format: PI-0000000001)
-    const lastInvoice = await prisma.purchase_invoices.findFirst({
-      where: {
-        invoice_number: {
-          startsWith: 'PI-'
-        }
-      },
-      orderBy: {
-        id: 'desc'
-      }
-    })
-    
-    let nextNumber = 1
-    if (lastInvoice) {
-      // Son qaimə nömrəsindən rəqəmi çıxar (PI-0000000001 və ya PI-1763327417457 -> rəqəm)
-      const match = lastInvoice.invoice_number.match(/PI-(\d+)/)
-      if (match) {
-        const lastNumber = parseInt(match[1], 10)
-        // Əgər köhnə formatdırsa (timestamp kimi böyük rəqəm), yeni formatdan başla
-        // Yeni format: 10 rəqəmli (maksimum 9999999999)
-        if (lastNumber > 9999999999) {
-          nextNumber = 1
-        } else {
-          nextNumber = lastNumber + 1
-        }
-      }
-    }
-    
-    // 10 rəqəmli format: PI-0000000001
-    const invoiceNumber = `PI-${String(nextNumber).padStart(10, '0')}`
-
-    // Ümumi məbləği hesabla
-    let totalAmount = 0
-    items.forEach((item: any) => {
-      totalAmount += parseFloat(item.total_price)
-    })
-
-    // Faktura yarat
-    const invoice = await prisma.purchase_invoices.create({
-      data: {
-        invoice_number: invoiceNumber,
-        supplier_id: supplier_id || null,
-        total_amount: totalAmount,
-        notes: notes || null,
-        is_active: is_active !== undefined ? is_active : true,
-      },
-    })
-
-    // Faktura maddələrini yarat
-    const invoiceItems = await Promise.all(
-      items.map((item: any) =>
-        prisma.purchase_invoice_items.create({
-          data: {
-            invoice_id: invoice.id,
-            product_id: item.product_id,
-            quantity: parseFloat(item.quantity),
-            unit_price: parseFloat(item.unit_price),
-            total_price: parseFloat(item.total_price),
-          },
-        })
-      )
-    )
-
-    // Anbar qalığını artır
-    for (const item of items) {
-      const warehouse = await prisma.warehouse.findFirst({
-        where: { product_id: item.product_id },
+    const response = await prisma.$transaction(async (tx) => {
+      const lastInvoice = await tx.purchase_invoices.findFirst({
+        where: { invoice_number: { startsWith: 'PI-' } },
+        orderBy: { id: 'desc' },
       })
 
-      if (warehouse) {
-        await prisma.warehouse.update({
-          where: { id: warehouse.id },
-          data: {
-            quantity: Number(warehouse.quantity || 0) + parseFloat(item.quantity),
-          },
-        })
-      } else {
-        // Əgər warehouse yoxdursa, yarat
-        await prisma.warehouse.create({
-          data: {
-            product_id: item.product_id,
-            quantity: parseFloat(item.quantity),
-          },
-        })
+      let nextNumber = 1
+      if (lastInvoice) {
+        const match = lastInvoice.invoice_number.match(/PI-(\d+)/)
+        if (match) {
+          const lastNumber = parseInt(match[1], 10)
+          nextNumber = lastNumber > 9999999999 ? 1 : lastNumber + 1
+        }
       }
-    }
 
-    const result = await prisma.purchase_invoices.findUnique({
-      where: { id: invoice.id },
-      include: {
-        suppliers: true,
-        purchase_invoice_items: {
-          include: {
-            products: true,
+      const invoiceNumber = `PI-${String(nextNumber).padStart(10, '0')}`
+
+      const normalizedItems = items.map((item: any) => ({
+        product_id: Number(item.product_id),
+        quantity: Number(item.quantity),
+        unit_price: Number(item.unit_price),
+        total_price: Number(item.total_price),
+      }))
+
+      const totalAmount = normalizedItems.reduce((sum, item) => sum + item.total_price, 0)
+
+      const invoice = await tx.purchase_invoices.create({
+        data: {
+          invoice_number: invoiceNumber,
+          supplier_id: supplier_id ? Number(supplier_id) : null,
+          total_amount: totalAmount,
+          notes: notes || null,
+          is_active: is_active !== undefined ? Boolean(is_active) : true,
+        },
+      })
+
+      await Promise.all(
+        normalizedItems.map((item) =>
+          tx.purchase_invoice_items.create({
+            data: {
+              invoice_id: invoice.id,
+              product_id: item.product_id,
+              quantity: item.quantity,
+              unit_price: item.unit_price,
+              total_price: item.total_price,
+            },
+          }),
+        ),
+      )
+
+      for (const item of normalizedItems) {
+        const warehouse = await tx.warehouse.findFirst({
+          where: { product_id: item.product_id },
+        })
+
+        if (warehouse) {
+          await tx.warehouse.update({
+            where: { id: warehouse.id },
+            data: {
+              quantity: Number(warehouse.quantity || 0) + item.quantity,
+            },
+          })
+        } else {
+          await tx.warehouse.create({
+            data: {
+              product_id: item.product_id,
+              quantity: item.quantity,
+            },
+          })
+        }
+      }
+
+      return tx.purchase_invoices.findUnique({
+        where: { id: invoice.id },
+        include: {
+          suppliers: true,
+          purchase_invoice_items: {
+            include: {
+              products: true,
+            },
           },
         },
-      },
+      })
     })
 
-    res.status(201).json(result)
+    res.status(201).json(response)
   } catch (error) {
     console.error('Create purchase invoice error:', error)
     res.status(500).json({ message: 'Alış qaiməsi yaradılarkən xəta baş verdi' })
@@ -172,66 +158,121 @@ export const updatePurchaseInvoice = async (req: AuthRequest, res: Response) => 
     const { id } = req.params
     const { supplier_id, items, notes, is_active } = req.body
 
-    const invoice = await prisma.purchase_invoices.findUnique({
-      where: { id: parseInt(id) },
-      include: {
-        purchase_invoice_items: true,
-      },
-    })
+    const updatedInvoice = await prisma.$transaction(async (tx) => {
+      const invoice = await tx.purchase_invoices.findUnique({
+        where: { id: parseInt(id, 10) },
+        include: { purchase_invoice_items: true },
+      })
 
-    if (!invoice) {
-      return res.status(404).json({ message: 'Qaimə tapılmadı' })
-    }
+      if (!invoice) {
+        throw new Error('NOT_FOUND')
+      }
 
-    // Köhnə item-ləri sil
-    await prisma.purchase_invoice_items.deleteMany({
-      where: { invoice_id: parseInt(id) },
-    })
+      // Köhnə item-lərin təsirini geri al
+      for (const item of invoice.purchase_invoice_items) {
+        if (!item.product_id) {
+          continue
+        }
+        const warehouse = await tx.warehouse.findFirst({
+          where: { product_id: item.product_id },
+        })
+        if (!warehouse) {
+          continue
+        }
+        const currentQuantity = Number(warehouse.quantity || 0)
+        if (currentQuantity < Number(item.quantity)) {
+          throw new Error(`Məhsul ID ${item.product_id} üçün stok düzəlişi mümkün deyil`)
+        }
+        await tx.warehouse.update({
+          where: { id: warehouse.id },
+          data: {
+            quantity: currentQuantity - Number(item.quantity),
+          },
+        })
+      }
 
-    // Yeni item-ləri əlavə et
-    if (items && Array.isArray(items)) {
-      await Promise.all(
-        items.map((item: any) =>
-          prisma.purchase_invoice_items.create({
-            data: {
-              invoice_id: parseInt(id),
-              product_id: item.product_id,
-              quantity: parseFloat(item.quantity),
-              unit_price: parseFloat(item.unit_price),
-              total_price: parseFloat(item.total_price),
-            },
-          })
+      await tx.purchase_invoice_items.deleteMany({
+        where: { invoice_id: invoice.id },
+      })
+
+      let normalizedItems: any[] = []
+      if (items && Array.isArray(items)) {
+        normalizedItems = items.map((item: any) => ({
+          product_id: Number(item.product_id),
+          quantity: Number(item.quantity),
+          unit_price: Number(item.unit_price),
+          total_price: Number(item.total_price),
+        }))
+
+        await Promise.all(
+          normalizedItems.map((item) =>
+            tx.purchase_invoice_items.create({
+              data: {
+                invoice_id: invoice.id,
+                product_id: item.product_id,
+                quantity: item.quantity,
+                unit_price: item.unit_price,
+                total_price: item.total_price,
+              },
+            }),
+          ),
         )
-      )
-    }
 
-    // Ümumi məbləği hesabla
-    const totalAmount = items && Array.isArray(items)
-      ? items.reduce((sum: number, item: any) => sum + parseFloat(item.total_price || 0), 0)
-      : invoice.total_amount
+        for (const item of normalizedItems) {
+          const warehouse = await tx.warehouse.findFirst({
+            where: { product_id: item.product_id },
+          })
+          if (warehouse) {
+            await tx.warehouse.update({
+              where: { id: warehouse.id },
+              data: {
+                quantity: Number(warehouse.quantity || 0) + item.quantity,
+              },
+            })
+          } else {
+            await tx.warehouse.create({
+              data: {
+                product_id: item.product_id,
+                quantity: item.quantity,
+              },
+            })
+          }
+        }
+      }
 
-    // Qaiməni yenilə
-    const updateData: any = {}
-    if (supplier_id !== undefined) updateData.supplier_id = supplier_id || null
-    if (totalAmount !== undefined) updateData.total_amount = totalAmount
-    if (notes !== undefined) updateData.notes = notes || null
-    if (is_active !== undefined) updateData.is_active = is_active
+      const totalAmount =
+        normalizedItems.length > 0
+          ? normalizedItems.reduce((sum, item) => sum + item.total_price, 0)
+          : invoice.total_amount
 
-    const updatedInvoice = await prisma.purchase_invoices.update({
-      where: { id: parseInt(id) },
-      data: updateData,
-      include: {
-        suppliers: true,
-        purchase_invoice_items: {
-          include: {
-            products: true,
+      const updateData: any = {}
+      if (supplier_id !== undefined) updateData.supplier_id = supplier_id ? Number(supplier_id) : null
+      if (totalAmount !== undefined) updateData.total_amount = totalAmount
+      if (notes !== undefined) updateData.notes = notes || null
+      if (is_active !== undefined) updateData.is_active = Boolean(is_active)
+
+      return tx.purchase_invoices.update({
+        where: { id: invoice.id },
+        data: updateData,
+        include: {
+          suppliers: true,
+          purchase_invoice_items: {
+            include: {
+              products: true,
+            },
           },
         },
-      },
+      })
     })
 
     res.json(updatedInvoice)
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === 'NOT_FOUND') {
+      return res.status(404).json({ message: 'Qaimə tapılmadı' })
+    }
+    if (error?.message?.includes('stok düzəlişi mümkün deyil')) {
+      return res.status(400).json({ message: error.message })
+    }
     console.error('Update purchase invoice error:', error)
     res.status(500).json({ message: 'Alış qaiməsi yenilənərkən xəta baş verdi' })
   }

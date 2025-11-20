@@ -26,9 +26,9 @@ export default defineConfig({
     //   }
     // })
   ],
-  // Mobil versiya Render-də /mobil/ path-i altında serve olunur,
-  // buna görə asset URL-ləri /mobil/assets/... kimi generasiya edilməlidir
-  base: '/mobil/',
+  // Eyni domen daxilində /mobil/ path-i altından serve olunacaq
+  // Production-da asset-lər /mobil/assets/... altında olacaq
+  base: process.env.NODE_ENV === 'production' ? '/mobil/' : '/',
   resolve: {
     alias: {
       '@shared': path.resolve(__dirname, '../shared'),

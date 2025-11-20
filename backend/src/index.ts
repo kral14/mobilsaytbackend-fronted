@@ -1,7 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
-import { execSync } from 'child_process'
+import path from 'path'
 import authRoutes from './routes/authRoutes'
 import productRoutes from './routes/productRoutes'
 import orderRoutes from './routes/orderRoutes'
@@ -16,31 +16,20 @@ import testRoutes from './routes/testRoutes'
 
 dotenv.config()
 
-// Production-də Prisma migration-ları avtomatik işə sal
-if (process.env.NODE_ENV === 'production') {
-  try {
-    console.log('🔄 [PRISMA] Database schema sinxronizasiya edilir...')
-    execSync('npx prisma db push --accept-data-loss', { 
-      stdio: 'inherit',
-      cwd: __dirname + '/..'
-    })
-    console.log('✅ [PRISMA] Database schema sinxronizasiya olundu')
-  } catch (error) {
-    console.error('⚠️  [PRISMA] Database sinxronizasiya xətası:', error)
-    // Xəta olsa belə serveri başlat (migration-lar sonra manual işə salına bilər)
+const requiredEnvVars = ['JWT_SECRET']
+requiredEnvVars.forEach((envVar) => {
+  if (!process.env[envVar]) {
+    console.error(`❌ Environment dəyişəni çatışmır: ${envVar}`)
+    process.exit(1)
   }
-}
+})
 
 const app = express()
 const PORT = Number(process.env.PORT) || 5000
 
 // CORS konfiqurasiyası
 const allowedOrigins = [
-  // Render frontend domenləri
-  'https://mobilsayt-web.onrender.com',
-  'https://mobilsayt-frontend.onrender.com',
-  'https://mobilsayt-mobil.onrender.com',
-  // Local development
+  // Lokal inkişaf mühiti
   'http://localhost:3000',
   'http://localhost:3001',
   'http://127.0.0.1:3000',
@@ -54,20 +43,10 @@ const corsOptions: cors.CorsOptions = {
       return callback(null, true)
     }
 
-    // Əsas whitelist yoxlaması
+    // Whitelist yoxlaması
     const isWhitelisted = allowedOrigins.includes(origin)
 
-    // Əlavə: hər ehtimala qarşı bütün `mobilsayt-*.onrender.com` domenlərini icazə ver
-    let isRenderMobilsayt = false
-    try {
-      const url = new URL(origin)
-      isRenderMobilsayt =
-        url.hostname.endsWith('.onrender.com') && url.hostname.startsWith('mobilsayt-')
-    } catch {
-      // URL parse alınmasa, nəzərə alma
-    }
-
-    if (isWhitelisted || isRenderMobilsayt) {
+    if (isWhitelisted) {
       console.log('✅ [CORS] Origin icazəlidir:', origin)
       return callback(null, true)
     }
@@ -95,60 +74,12 @@ app.options('*', cors(corsOptions))
 
 app.use(express.json())
 
-// Gələn bütün request-lər üçün detallı log middleware-i
 app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
   const start = Date.now()
-  const { method, originalUrl, headers, query, body } = req
-
-  // Həssas məlumatları maskala
-  const safeHeaders: any = { ...headers }
-  if (safeHeaders.authorization) {
-    safeHeaders.authorization = '***redacted***'
-  }
-
-  const safeBody: any =
-    body && typeof body === 'object'
-      ? { ...body }
-      : body
-
-  if (safeBody && typeof safeBody === 'object') {
-    if (safeBody.password) safeBody.password = '***redacted***'
-    if (safeBody.oldPassword) safeBody.oldPassword = '***redacted***'
-    if (safeBody.newPassword) safeBody.newPassword = '***redacted***'
-  }
-
-  const clientIp =
-    (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-    req.socket.remoteAddress
-
-  console.log(
-    '📥 [REQUEST]',
-    JSON.stringify(
-      {
-        method,
-        url: originalUrl,
-        query,
-        body: safeBody,
-        headers: {
-          origin: headers.origin,
-          host: headers.host,
-          'user-agent': headers['user-agent'],
-          referer: headers.referer || headers.referrer,
-        },
-        ip: clientIp,
-      },
-      null,
-      2,
-    ),
-  )
-
   res.on('finish', () => {
     const duration = Date.now() - start
-    console.log(
-      `📤 [RESPONSE] ${method} ${originalUrl} -> ${res.statusCode} (${duration}ms)`,
-    )
+    console.log(`[HTTP] ${req.method} ${req.originalUrl} -> ${res.statusCode} (${duration}ms)`)
   })
-
   next()
 })
 
@@ -169,6 +100,44 @@ app.use('/api/suppliers', supplierRoutes)
 app.use('/api/supplier-folders', supplierFolderRoutes)
 app.use('/api/purchase-invoices', purchaseInvoiceRoutes)
 app.use('/api/test', testRoutes)
+
+// =========================
+// Frontend static faylları
+// =========================
+
+// Build olunmuş frontend-lərin yolları:
+// __dirname -> backend/dist
+const rootDir = path.resolve(__dirname, '..', '..')
+const webDistPath = path.join(rootDir, 'web', 'dist')
+const mobilDistPath = path.join(rootDir, 'mobil', 'dist')
+
+// Web və Mobil build-ləri static kimi serve et
+app.use('/web', express.static(webDistPath))
+app.use('/mobil', express.static(mobilDistPath))
+
+// Eyni linkdən (/) giriş zamanı cihaz növünə görə yönləndirmə
+app.get('/', (req, res) => {
+  const userAgent = req.headers['user-agent'] || ''
+
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    userAgent,
+  )
+
+  const indexFile = isMobile
+    ? path.join(mobilDistPath, 'index.html')
+    : path.join(webDistPath, 'index.html')
+
+  res.sendFile(indexFile)
+})
+
+// React Router üçün fallback-lar (PC və Mobil üçün ayrıca)
+app.get('/web/*', (req, res) => {
+  res.sendFile(path.join(webDistPath, 'index.html'))
+})
+
+app.get('/mobil/*', (req, res) => {
+  res.sendFile(path.join(mobilDistPath, 'index.html'))
+})
 
 // 404 handler
 app.use((req, res) => {
