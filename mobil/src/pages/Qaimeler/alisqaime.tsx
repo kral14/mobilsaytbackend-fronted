@@ -302,6 +302,8 @@ export default function AlisQaimeleri() {
     setInvoiceForm({
       supplier_id: null,
       supplier_name: '',
+      customer_id: null,
+      customer_name: '',
       invoiceItems: [],
       notes: '',
       invoice_number: '',
@@ -656,6 +658,8 @@ export default function AlisQaimeleri() {
       setInvoiceForm({
         supplier_id: fullInvoice.supplier_id || null,
         supplier_name: fullInvoice.suppliers?.name || '',
+        customer_id: null,
+        customer_name: '',
         invoiceItems: items,
         notes: fullInvoice.notes || '',
         invoice_number: fullInvoice.invoice_number || '',

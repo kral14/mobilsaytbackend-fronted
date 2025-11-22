@@ -290,6 +290,8 @@ export default function SatisQaimeleri() {
     setSelectedInvoice(null)
     // İlk açılışda tarixləri boş saxla, placeholder göstərilsin
     setInvoiceForm({
+      supplier_id: null,
+      supplier_name: '',
       customer_id: null,
       customer_name: '',
       invoiceItems: [],
@@ -644,6 +646,8 @@ export default function SatisQaimeleri() {
       
       setSelectedInvoice(fullInvoice)
       setInvoiceForm({
+        supplier_id: null,
+        supplier_name: '',
         customer_id: fullInvoice.customer_id || null,
         customer_name: fullInvoice.customers?.name || '',
         invoiceItems: items,
