@@ -530,7 +530,7 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
               // Log yaz (transaction-dan sonra)
               logPromises.push(
                 logWarehouseChange(
-                  req.userId,
+                  req.userId ? parseInt(req.userId as string, 10) : null,
                   item.product_id,
                   item.products?.name || `ID ${item.product_id}`,
                   item.products?.code || null,
@@ -555,7 +555,7 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
               // Log yaz (transaction-dan sonra)
               logPromises.push(
                 logWarehouseChange(
-                  req.userId,
+                  req.userId ? parseInt(req.userId as string, 10) : null,
                   item.product_id,
                   item.products?.name || newWarehouse.products?.name || `ID ${item.product_id}`,
                   item.products?.code || newWarehouse.products?.code || null,
@@ -588,7 +588,7 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
               // Log yaz (transaction-dan sonra)
               logPromises.push(
                 logCustomerBalanceChange(
-                  req.userId,
+                  req.userId ? parseInt(req.userId as string, 10) : null,
                   invoice.customer_id,
                   customer.name,
                   currentBalance,
@@ -624,7 +624,7 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
               // Log yaz (transaction-dan sonra)
               logPromises.push(
                 logWarehouseChange(
-                  req.userId,
+                  req.userId ? parseInt(req.userId as string, 10) : null,
                   item.product_id,
                   item.products?.name || warehouse.products?.name || `ID ${item.product_id}`,
                   item.products?.code || warehouse.products?.code || null,
@@ -648,7 +648,7 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
               // Log yaz (transaction-dan sonra)
               logPromises.push(
                 logWarehouseChange(
-                  req.userId,
+                  req.userId ? parseInt(req.userId as string, 10) : null,
                   item.product_id,
                   item.products?.name || newWarehouse.products?.name || `ID ${item.product_id}`,
                   item.products?.code || newWarehouse.products?.code || null,
@@ -682,7 +682,7 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
               // Log yaz (transaction-dan sonra)
               logPromises.push(
                 logCustomerBalanceChange(
-                  req.userId,
+                  req.userId ? parseInt(req.userId as string, 10) : null,
                   invoice.customer_id,
                   customer.name,
                   currentBalance,
@@ -774,7 +774,7 @@ export const deleteOrder = async (req: AuthRequest, res: Response) => {
 
             // Log yaz
             await logWarehouseChange(
-              req.userId,
+              req.userId ? parseInt(req.userId as string, 10) : null,
               item.product_id,
               warehouse.products?.name || `ID ${item.product_id}`,
               warehouse.products?.code || null,
@@ -796,7 +796,7 @@ export const deleteOrder = async (req: AuthRequest, res: Response) => {
 
             // Log yaz
             await logWarehouseChange(
-              req.userId,
+              req.userId ? parseInt(req.userId as string, 10) : null,
               item.product_id,
               newWarehouse.products?.name || `ID ${item.product_id}`,
               newWarehouse.products?.code || null,
@@ -856,7 +856,7 @@ export const deleteOrder = async (req: AuthRequest, res: Response) => {
       where: { id: parseInt(id) },
     })
     if (invoice) {
-      await logInvoiceDeleted(req.userId, invoice.id, invoice.invoice_number, 'sale')
+      await logInvoiceDeleted(req.userId ? parseInt(req.userId as string, 10) : null, invoice.id, invoice.invoice_number, 'sale')
     }
 
     res.json({ message: 'Satış qaiməsi silindi' })
@@ -912,7 +912,7 @@ export const restoreOrder = async (req: AuthRequest, res: Response) => {
     })
 
     // Qaimə geri qaytarıldı log
-    await logInvoiceRestored(req.userId, restoredInvoice.id, restoredInvoice.invoice_number, 'sale')
+    await logInvoiceRestored(req.userId ? parseInt(req.userId as string, 10) : null, restoredInvoice.id, restoredInvoice.invoice_number, 'sale')
 
     res.json(restoredInvoice)
   } catch (error: any) {

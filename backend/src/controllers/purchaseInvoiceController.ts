@@ -338,7 +338,7 @@ export const updatePurchaseInvoice = async (req: AuthRequest, res: Response) => 
             
             // Log yaz
             await logSupplierBalanceChange(
-              req.userId,
+              req.userId ? parseInt(req.userId as string, 10) : null,
               invoice.supplier_id,
               oldSupplier.name,
               currentBalance,
@@ -432,7 +432,7 @@ export const updatePurchaseInvoice = async (req: AuthRequest, res: Response) => 
             
             // Log yaz
             await logSupplierBalanceChange(
-              req.userId,
+              req.userId ? parseInt(req.userId as string, 10) : null,
               newSupplierId,
               newSupplier.name,
               currentBalance,
@@ -532,7 +532,7 @@ export const updatePurchaseInvoiceStatus = async (req: AuthRequest, res: Respons
               // Log yaz (transaction-dan sonra)
               logPromises.push(
                 logWarehouseChange(
-                  req.userId,
+                  req.userId ? parseInt(req.userId as string, 10) : null,
                   item.product_id,
                   warehouse.products?.name || `ID ${item.product_id}`,
                   warehouse.products?.code || null,
@@ -556,7 +556,7 @@ export const updatePurchaseInvoiceStatus = async (req: AuthRequest, res: Respons
               // Log yaz (transaction-dan sonra)
               logPromises.push(
                 logWarehouseChange(
-                  req.userId,
+                  req.userId ? parseInt(req.userId as string, 10) : null,
                   item.product_id,
                   newWarehouse.products?.name || `ID ${item.product_id}`,
                   newWarehouse.products?.code || null,
@@ -590,7 +590,7 @@ export const updatePurchaseInvoiceStatus = async (req: AuthRequest, res: Respons
               // Log yaz (transaction-dan sonra)
               logPromises.push(
                 logSupplierBalanceChange(
-                  req.userId,
+                  req.userId ? parseInt(req.userId as string, 10) : null,
                   invoice.supplier_id,
                   supplier.name,
                   currentBalance,
@@ -628,7 +628,7 @@ export const updatePurchaseInvoiceStatus = async (req: AuthRequest, res: Respons
               // Log yaz (transaction-dan sonra)
               logPromises.push(
                 logWarehouseChange(
-                  req.userId,
+                  req.userId ? parseInt(req.userId as string, 10) : null,
                   item.product_id,
                   warehouse.products?.name || `ID ${item.product_id}`,
                   warehouse.products?.code || null,
@@ -663,7 +663,7 @@ export const updatePurchaseInvoiceStatus = async (req: AuthRequest, res: Respons
               // Log yaz (transaction-dan sonra)
               logPromises.push(
                 logSupplierBalanceChange(
-                  req.userId,
+                  req.userId ? parseInt(req.userId as string, 10) : null,
                   invoice.supplier_id,
                   supplier.name,
                   currentBalance,
@@ -713,7 +713,7 @@ export const updatePurchaseInvoiceStatus = async (req: AuthRequest, res: Respons
     // Xətanı log faylına yaz
     try {
       await createLog({
-        user_id: req.userId,
+        user_id: req.userId ? parseInt(req.userId as string, 10) : null,
         action_type: 'error',
         entity_type: 'purchase_invoice',
         entity_id: req.params.id ? parseInt(req.params.id) : null,
@@ -787,7 +787,7 @@ export const deletePurchaseInvoice = async (req: AuthRequest, res: Response) => 
 
             // Log yaz
             await logWarehouseChange(
-              req.userId,
+              req.userId ? parseInt(req.userId as string, 10) : null,
               item.product_id,
               warehouse.products?.name || `ID ${item.product_id}`,
               warehouse.products?.code || null,
@@ -819,7 +819,7 @@ export const deletePurchaseInvoice = async (req: AuthRequest, res: Response) => 
             
             // Log yaz
             await logSupplierBalanceChange(
-              req.userId,
+              req.userId ? parseInt(req.userId as string, 10) : null,
               invoice.supplier_id,
               supplier.name,
               currentBalance,
