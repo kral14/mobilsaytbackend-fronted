@@ -6,6 +6,8 @@ import {
   updatePurchaseInvoice,
   updatePurchaseInvoiceStatus,
   deletePurchaseInvoice,
+  restorePurchaseInvoice,
+  syncWarehouseStock,
 } from '../controllers/purchaseInvoiceController'
 import { authMiddleware } from '../middleware/auth'
 
@@ -20,6 +22,8 @@ router.post('/', createPurchaseInvoice)
 router.patch('/:id', updatePurchaseInvoice)
 router.patch('/:id/status', updatePurchaseInvoiceStatus)
 router.delete('/:id', deletePurchaseInvoice)
+router.post('/:id/restore', restorePurchaseInvoice)
+router.post('/sync-warehouse-stock', syncWarehouseStock)
 
 export default router
 

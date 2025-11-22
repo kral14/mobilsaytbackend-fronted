@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import prisma from '../config/database'
 import { hashPassword, comparePassword } from '../utils/hashPassword'
 import { generateToken } from '../utils/generateToken'
+import { createUserLogFile, syncUserLogsToFile, writeToUserLogFile } from '../utils/userLogFiles'
 
 export const register = async (req: Request, res: Response) => {
   try {
@@ -52,6 +53,10 @@ export const register = async (req: Request, res: Response) => {
 
     // Token yarat
     const token = generateToken(user.id.toString())
+
+    // İstifadəçi üçün log faylı yarat
+    await createUserLogFile(user.id)
+    await writeToUserLogFile(user.id, `İstifadəçi qeydiyyatdan keçdi. Email: ${email}`)
 
     console.log('✅ [AUTH] Register uğurlu:', {
       userId: user.id,
@@ -118,6 +123,11 @@ export const login = async (req: Request, res: Response) => {
     // Token yarat
     const token = generateToken(user.id.toString())
 
+    // İstifadəçi üçün log faylı yarat və sinxronizasiya et
+    await createUserLogFile(user.id)
+    await syncUserLogsToFile(user.id)
+    await writeToUserLogFile(user.id, `İstifadəçi giriş etdi. Email: ${email}`)
+
     console.log('✅ [AUTH] Login uğurlu:', {
       userId: user.id,
       email: user.email,
@@ -129,6 +139,7 @@ export const login = async (req: Request, res: Response) => {
       user: {
         id: user.id,
         email: user.email,
+        role: user.role || 'user',
         createdAt: user.created_at,
       },
       customer: customer ? {

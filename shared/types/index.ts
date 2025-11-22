@@ -3,6 +3,7 @@
 export interface User {
   id: number
   email: string
+  role?: string | null
   created_at: Date | null
 }
 
@@ -78,6 +79,8 @@ export interface SaleInvoice {
   invoice_date: Date | null
   payment_date: Date | null
   notes: string | null
+  is_active: boolean | null
+  is_deleted: boolean | null
   created_at: Date | null
   customers?: Customer | null
   sale_invoice_items?: SaleInvoiceItem[]
@@ -147,6 +150,7 @@ export interface PurchaseInvoice {
   invoice_date: Date | null
   notes: string | null
   is_active: boolean | null
+  is_deleted: boolean | null
   created_at: Date | null
   suppliers?: Supplier | null
   purchase_invoice_items?: PurchaseInvoiceItem[]
@@ -160,4 +164,29 @@ export interface PurchaseInvoiceItem {
   unit_price: number
   total_price: number
   products?: Product | null
+}
+
+export interface Payment {
+  id: number
+  payment_type: 'supplier' | 'customer'
+  supplier_id: number | null
+  customer_id: number | null
+  amount: number
+  payment_date: Date | null
+  notes: string | null
+  created_at: Date | null
+  created_by: number | null
+  suppliers?: Supplier | null
+  customers?: Customer | null
+  users?: {
+    id: number
+    email: string
+    full_name: string | null
+  } | null
+}
+
+export interface CashBalance {
+  total_income: number
+  total_expense: number
+  balance: number
 }

@@ -13,6 +13,8 @@ import supplierRoutes from './routes/supplierRoutes'
 import supplierFolderRoutes from './routes/supplierFolderRoutes'
 import purchaseInvoiceRoutes from './routes/purchaseInvoiceRoutes'
 import testRoutes from './routes/testRoutes'
+import logRoutes from './routes/logRoutes'
+import paymentRoutes from './routes/paymentRoutes'
 
 dotenv.config()
 
@@ -105,6 +107,8 @@ app.use('/api/suppliers', supplierRoutes)
 app.use('/api/supplier-folders', supplierFolderRoutes)
 app.use('/api/purchase-invoices', purchaseInvoiceRoutes)
 app.use('/api/test', testRoutes)
+app.use('/api/logs', logRoutes)
+app.use('/api/payments', paymentRoutes)
 
 // =========================
 // Frontend static faylları
@@ -147,7 +151,7 @@ app.use((req, res) => {
 })
 
 // Error handler
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use(async (err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('❌ [ERROR] Global error handler:')
   console.error('❌ [ERROR] Error message:', err.message)
   console.error('❌ [ERROR] Error code:', err.code)
@@ -156,7 +160,31 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   console.error('❌ [ERROR] Request method:', req.method)
   console.error('❌ [ERROR] Full error object:', JSON.stringify(err, Object.getOwnPropertyNames(err), 2))
   
-  res.status(500).json({ 
+  // Xətanı log faylına yaz (yalnız 500 xətaları üçün)
+  if (err.status === 500 || !err.status) {
+    try {
+      const { createLog } = await import('./utils/logger')
+      const userId = (req as any).userId || null
+      await createLog({
+        user_id: userId,
+        action_type: 'error',
+        entity_type: 'system',
+        entity_id: null,
+        description: `Server xətası: ${req.method} ${req.path} - ${err.message}`,
+        details: {
+          error_message: err.message,
+          error_code: err.code,
+          error_stack: err.stack,
+          request_path: req.path,
+          request_method: req.method,
+        },
+      })
+    } catch (logError) {
+      console.error('❌ [ERROR] Xəta log yazıla bilmədi:', logError)
+    }
+  }
+  
+  res.status(err.status || 500).json({ 
     message: 'Server xətası',
     error: err.message,
     code: err.code,

@@ -12,6 +12,7 @@ import KassaMedaxil from './pages/Kassa/Medaxil'
 import KassaMexaric from './pages/Kassa/Mexaric'
 import Alicilar from './pages/Musteriler/Alici'
 import Saticilar from './pages/Musteriler/Satici'
+import Admin from './pages/Admin'
 import ProtectedRoute from './components/ProtectedRoute'
 
 const basename = import.meta.env.DEV ? '/' : '/web'
@@ -106,6 +107,14 @@ function App() {
           element={
             <ProtectedRoute>
               <Saticilar />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute requireAdmin={true}>
+              <Admin />
             </ProtectedRoute>
           }
         />

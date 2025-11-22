@@ -7,12 +7,13 @@ import Profile from './pages/Profile'
 import Hesablar from './pages/Hesablar'
 import Anbar from './pages/Anbar'
 import AlisQaimeleri from './pages/Qaimeler/Alis'
-import SatisQaimeleri from './pages/Qaimeler/Satis'
+import SatisQaimeleri from './pages/Qaimeler/Satisqaime'
 import KassaMedaxil from './pages/Kassa/Medaxil'
 import KassaMexaric from './pages/Kassa/Mexaric'
 import Alicilar from './pages/Musteriler/Alici'
 import Saticilar from './pages/Musteriler/Satici'
 import DebugLogs from './pages/DebugLogs'
+import Admin from './pages/Admin'
 import ProtectedRoute from './components/ProtectedRoute'
 
 const basename = import.meta.env.DEV ? '/' : '/mobil'
@@ -116,6 +117,14 @@ function App() {
           element={
             <ProtectedRoute>
               <DebugLogs />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute requireAdmin={true}>
+              <Admin />
             </ProtectedRoute>
           }
         />

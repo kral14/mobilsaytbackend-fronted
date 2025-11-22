@@ -5,6 +5,9 @@ import {
   createOrder,
   updateOrder,
   updateOrderStatus,
+  deleteOrder,
+  restoreOrder,
+  checkWarehouseStock,
 } from '../controllers/orderController'
 import { authMiddleware } from '../middleware/auth'
 
@@ -18,6 +21,9 @@ router.get('/:id', getOrderById)
 router.post('/', createOrder)
 router.put('/:id', updateOrder)
 router.patch('/:id/status', updateOrderStatus)
+router.delete('/:id', deleteOrder)
+router.post('/:id/restore', restoreOrder)
+router.post('/check-warehouse-stock', checkWarehouseStock)
 
 export default router
 

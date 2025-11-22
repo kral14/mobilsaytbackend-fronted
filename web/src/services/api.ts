@@ -272,4 +272,110 @@ export const userAPI = {
   },
 }
 
+// Logs API
+export const logsAPI = {
+  getAll: async (params?: {
+    page?: number
+    limit?: number
+    action_type?: string
+    entity_type?: string
+    start_date?: string
+    end_date?: string
+    user_id?: string
+    entity_id?: string
+  }): Promise<{
+    logs: any[]
+    pagination: {
+      page: number
+      limit: number
+      total: number
+      totalPages: number
+    }
+  }> => {
+    const queryParams = new URLSearchParams()
+    if (params?.page) queryParams.append('page', params.page.toString())
+    if (params?.limit) queryParams.append('limit', params.limit.toString())
+    if (params?.action_type) queryParams.append('action_type', params.action_type)
+    if (params?.entity_type) queryParams.append('entity_type', params.entity_type)
+    if (params?.start_date) queryParams.append('start_date', params.start_date)
+    if (params?.end_date) queryParams.append('end_date', params.end_date)
+    if (params?.user_id) queryParams.append('user_id', params.user_id)
+    if (params?.entity_id) queryParams.append('entity_id', params.entity_id)
+
+    const response = await api.get(`/logs?${queryParams.toString()}`)
+    return response.data
+  },
+
+  getInvoiceNumbers: async (entityType: string): Promise<{
+    invoices: Array<{
+      id: number
+      invoice_number: string
+    }>
+  }> => {
+    const response = await api.get(`/logs/invoice-numbers?entity_type=${entityType}`)
+    return response.data
+  },
+
+  deleteOld: async (days: number): Promise<{ message: string; deleted_count: number }> => {
+    const response = await api.delete('/logs', { data: { days } })
+    return response.data
+  },
+
+  // Log faylları
+  getAllLogFiles: async (): Promise<{
+    logFiles: Array<{
+      userId: number
+      fileName: string
+      filePath: string
+      size: number
+      createdAt: Date
+      modifiedAt: Date
+      userEmail: string
+      userFullName: string
+    }>
+  }> => {
+    const response = await api.get('/logs/files')
+    return response.data
+  },
+
+  downloadLogFile: async (userId: number): Promise<Blob> => {
+    const response = await api.get(`/logs/files/${userId}/download`, {
+      responseType: 'blob',
+    })
+    return response.data
+  },
+
+  deleteLogFile: async (userId: number): Promise<{ message: string }> => {
+    const response = await api.delete(`/logs/files/${userId}`)
+    return response.data
+  },
+
+  syncLogFile: async (userId: number): Promise<{ message: string }> => {
+    const response = await api.post(`/logs/files/${userId}/sync`)
+    return response.data
+  },
+}
+
+// Users API (Admin üçün)
+export const usersAPI = {
+  getAll: async (): Promise<User[]> => {
+    const response = await api.get<User[]>('/users')
+    return response.data
+  },
+
+  create: async (data: { email: string; password: string; role: string }): Promise<User> => {
+    const response = await api.post<User>('/users', data)
+    return response.data
+  },
+
+  update: async (id: string, data: { email?: string; password?: string; role?: string }): Promise<User> => {
+    const response = await api.put<User>(`/users/${id}`, data)
+    return response.data
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/users/${id}`)
+  },
+}
+
 export default api

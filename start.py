@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Backend və Frontend serverləri eyni zamanda işə salmaq üçün Python script
 """
@@ -16,9 +17,22 @@ import socket
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-# Rənglər (Windows üçün)
+# Windows üçün encoding düzəltməsi
 if platform.system() == 'Windows':
     os.system('color')
+    # PowerShell və cmd üçün UTF-8 encoding
+    if sys.stdout.encoding != 'utf-8':
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+        except:
+            pass
+    if sys.stderr.encoding != 'utf-8':
+        try:
+            sys.stderr.reconfigure(encoding='utf-8')
+        except:
+            pass
+    # Environment variable təyin et
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
 
 class Colors:
     GREEN = '\033[92m'
@@ -31,7 +45,12 @@ class Colors:
 
 def print_colored(text, color=Colors.RESET):
     """Rəngli mətn çap et"""
-    print(f"{color}{text}{Colors.RESET}")
+    try:
+        print(f"{color}{text}{Colors.RESET}")
+    except UnicodeEncodeError:
+        # Əgər encoding problemi varsa, emoji-ləri sil
+        text_safe = text.encode('ascii', 'ignore').decode('ascii')
+        print(f"{color}{text_safe}{Colors.RESET}")
 
 def get_local_ip():
     """Lokal şəbəkə IP ünvanını qaytar"""
@@ -134,22 +153,34 @@ class PrismaSchemaHandler(FileSystemEventHandler):
         self.processes_ref = processes_ref
         self.threads_ref = threads_ref
         self.last_restart = 0
-        self.restart_delay = 5  # 5 saniyə gözlə
+        self.restart_delay = 15  # 15 saniyə gözlə (loop-un qarşısını almaq üçün)
         
     def on_modified(self, event):
         if event.is_directory:
             return
         
+        # Debug: Bütün dəyişiklikləri göstər
+        src_path = event.src_path.replace('\\', '/')
+        schema_path = str(self.backend_dir / 'prisma' / 'schema.prisma').replace('\\', '/')
+        
+        # Debug mesajı
+        if 'schema.prisma' in src_path.lower():
+            print_colored(f"🔍 [DEBUG] Fayl dəyişikliyi aşkar edildi: {src_path}", Colors.CYAN)
+            print_colored(f"🔍 [DEBUG] Gözlənilən path: {schema_path}", Colors.CYAN)
+        
         # Yalnız schema.prisma faylının dəyişikliklərini izlə
-        if event.src_path.endswith('schema.prisma'):
+        # Windows və Linux üçün path separator-ları nəzərə al
+        if src_path.endswith('schema.prisma') or src_path == schema_path or 'schema.prisma' in src_path:
             current_time = time.time()
             # Çox tez-tez restart olmasın
             if current_time - self.last_restart < self.restart_delay:
+                print_colored(f"⏳ [DEBUG] Çox tez-tez restart olmasın, gözləyir... ({int(self.restart_delay - (current_time - self.last_restart))}s)", Colors.CYAN)
                 return
             
             self.last_restart = current_time
             print_colored("\n" + "=" * 70, Colors.YELLOW)
             print_colored("🔄 Prisma schema dəyişikliyi aşkar edildi!", Colors.YELLOW)
+            print_colored(f"   Fayl: {src_path}", Colors.CYAN)
             print_colored("=" * 70, Colors.YELLOW)
             
             # Əvvəlcə backend-i dayandır (Prisma Client lock-unu açmaq üçün)
@@ -165,6 +196,9 @@ class PrismaSchemaHandler(FileSystemEventHandler):
             backend_was_running = False
             if backend_proc and backend_proc.poll() is None:
                 backend_was_running = True
+                # Backend-i processes list-dən müvəqqəti olaraq çıxar (əsas loop-da xəta kimi qəbul olunmasın)
+                if backend_idx >= 0:
+                    self.processes_ref[backend_idx] = ('Backend', None, Colors.CYAN)
                 try:
                     backend_proc.terminate()
                     backend_proc.wait(timeout=5)
@@ -202,62 +236,112 @@ class PrismaSchemaHandler(FileSystemEventHandler):
             print_colored("⏳ Gecikmə (lock-un açılması üçün)...", Colors.YELLOW)
             time.sleep(5)  # 5 saniyəyə artırdıq
             
-            # Prisma Client generate et
-            print_colored("🔧 Prisma Client yenidən generate edilir...", Colors.YELLOW)
+            # Prisma Client generate et (db push özü generate edir, ona görə skip edə bilərik)
+            print_colored("🔧 Prisma Client və Database schema yenilənir...", Colors.YELLOW)
             is_windows = platform.system() == 'Windows'
             prisma_env = os.environ.copy()
             prisma_env['DATABASE_URL'] = self.backend_env_ref['DATABASE_URL']
             
             try:
-                # Prisma Client generate et (bir neçə dəfə cəhd et)
-                max_retries = 3
+                # Prisma Client generate et (qısa timeout ilə)
                 result = None
-                for attempt in range(max_retries):
-                    if attempt > 0:
-                        print_colored(f"   Cəhd {attempt + 1}/{max_retries}...", Colors.YELLOW)
-                        time.sleep(2)
-                    
-                    result = subprocess.run(
+                try:
+                    print_colored("   Prisma Client generate işləyir...", Colors.CYAN)
+                    proc = subprocess.Popen(
                         ['npx', 'prisma', 'generate'],
                         cwd=self.backend_dir,
                         shell=is_windows,
                         env=prisma_env,
-                        capture_output=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
                         text=True,
-                        timeout=60
+                        bufsize=1
                     )
                     
-                    if result.returncode == 0:
-                        break
-                # Database-i schema ilə sinxronizasiya et (Prisma Client generate uğurlu olsun və ya olmasın)
-                print_colored("🔄 Database schema sinxronizasiya edilir...", Colors.YELLOW)
-                db_push_result = subprocess.run(
-                    ['npx', 'prisma', 'db', 'push', '--accept-data-loss'],
-                    cwd=self.backend_dir,
-                    shell=is_windows,
-                    env=prisma_env,
-                    capture_output=True,
-                    text=True,
-                    timeout=60
-                )
-                if db_push_result.returncode == 0:
-                    print_colored("✅ Database schema sinxronizasiya olundu", Colors.GREEN)
-                else:
-                    print_colored("⚠️  Database sinxronizasiya xətası", Colors.YELLOW)
-                    if db_push_result.stderr:
-                        print_colored(f"Xəta: {db_push_result.stderr[:500]}", Colors.YELLOW)
-                    if db_push_result.stdout:
-                        print_colored(f"Çıxış: {db_push_result.stdout[:500]}", Colors.YELLOW)
+                    try:
+                        stdout, stderr = proc.communicate(timeout=30)  # 30 saniyə timeout
+                        result = type('obj', (object,), {
+                            'returncode': proc.returncode,
+                            'stdout': stdout,
+                            'stderr': stderr
+                        })()
+                        
+                        if result.returncode == 0:
+                            print_colored("✅ Prisma Client generate edildi", Colors.GREEN)
+                        else:
+                            print_colored("⚠️  Prisma Client generate xətası (db push özü generate edəcək)", Colors.YELLOW)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait()
+                        print_colored("⚠️  Prisma Client generate timeout (db push özü generate edəcək)", Colors.YELLOW)
+                        result = None
+                except Exception as e:
+                    print_colored(f"⚠️  Prisma Client generate xətası: {str(e)} (db push özü generate edəcək)", Colors.YELLOW)
+                    result = None
                 
-                if result and result.returncode == 0:
-                    print_colored("✅ Prisma Client yenidən generate edildi", Colors.GREEN)
+                # Database-i schema ilə sinxronizasiya et (db push özü generate edir)
+                print_colored("🔄 Database schema sinxronizasiya edilir (prisma db push)...", Colors.YELLOW)
+                print_colored("   Bu proses bir neçə saniyə çəkə bilər...", Colors.CYAN)
+                try:
+                    # db push özü generate edir, ona görə --skip-generate istifadə etmirik
+                    db_push_proc = subprocess.Popen(
+                        ['npx', 'prisma', 'db', 'push', '--accept-data-loss'],
+                        cwd=self.backend_dir,
+                        shell=is_windows,
+                        env=prisma_env,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        bufsize=1
+                    )
+                    
+                    try:
+                        # Progress mesajı
+                        print_colored("   Gözlənilir... (120 saniyəyə qədər)", Colors.CYAN)
+                        stdout, stderr = db_push_proc.communicate(timeout=120)
+                        db_push_result = type('obj', (object,), {
+                            'returncode': db_push_proc.returncode,
+                            'stdout': stdout,
+                            'stderr': stderr
+                        })()
+                        print_colored("   Database schema sinxronizasiya tamamlandı", Colors.CYAN)
+                    except subprocess.TimeoutExpired:
+                        db_push_proc.kill()
+                        db_push_proc.wait()
+                        print_colored("⚠️  Database schema sinxronizasiya timeout", Colors.YELLOW)
+                        db_push_result = None
+                except Exception as e:
+                    print_colored(f"⚠️  Database schema sinxronizasiya xətası: {str(e)}", Colors.YELLOW)
+                    db_push_result = None
+                if db_push_result and db_push_result.returncode == 0:
+                    print_colored("✅ Database schema sinxronizasiya olundu", Colors.GREEN)
+                    if db_push_result.stdout:
+                        # Əhəmiyyətli mesajları göstər
+                        output_lines = db_push_result.stdout.split('\n')
+                        for line in output_lines:
+                            if any(keyword in line.lower() for keyword in ['created', 'altered', 'added', 'column']):
+                                print_colored(f"   {line}", Colors.CYAN)
+                elif db_push_result:
+                    error_msg = db_push_result.stderr.lower() if db_push_result.stderr else ""
+                    if "already in sync" in error_msg or "already up to date" in error_msg:
+                        print_colored("✅ Database schema artıq aktualdır", Colors.GREEN)
+                    else:
+                        print_colored("⚠️  Database sinxronizasiya xətası", Colors.YELLOW)
+                        if db_push_result.stderr:
+                            print_colored(f"Xəta: {db_push_result.stderr[:500]}", Colors.YELLOW)
+                        if db_push_result.stdout:
+                            print_colored(f"Çıxış: {db_push_result.stdout[:500]}", Colors.YELLOW)
                 else:
-                    print_colored("⚠️  Prisma Client generate edilə bilmədi (file lock)", Colors.YELLOW)
-                    print_colored("   Backend-i yenidən başlatdıqda Prisma Client avtomatik yüklənəcək", Colors.YELLOW)
-                    if result and result.stderr:
-                        print_colored(f"Xəta: {result.stderr[:500]}", Colors.YELLOW)
-                    if result and result.stdout:
-                        print_colored(f"Çıxış: {result.stdout[:500]}", Colors.YELLOW)
+                    print_colored("⚠️  Database schema sinxronizasiya timeout oldu", Colors.YELLOW)
+                
+                if not result or result.returncode != 0:
+                    if result:
+                        print_colored("⚠️  Prisma Client generate edilə bilmədi (file lock)", Colors.YELLOW)
+                        print_colored("   Backend-i yenidən başlatdıqda Prisma Client avtomatik yüklənəcək", Colors.YELLOW)
+                        if result.stderr:
+                            print_colored(f"Xəta: {result.stderr[:500]}", Colors.YELLOW)
+                        if result.stdout:
+                            print_colored(f"Çıxış: {result.stdout[:500]}", Colors.YELLOW)
                 
                 # Backend serveri yenidən başlat (həmişə)
                 print_colored("🔄 Backend serveri yenidən başladılır...", Colors.YELLOW)
@@ -651,6 +735,7 @@ def main():
     print()
     
     processes = []
+    threads = []  # Threads-i əvvəlcə yarat
     observer = None
     
     try:
@@ -679,9 +764,15 @@ def main():
         try:
             schema_handler = PrismaSchemaHandler(backend_dir, backend_env, processes, threads)
             observer = Observer()
-            observer.schedule(schema_handler, str(backend_dir / 'prisma'), recursive=False)
-            observer.start()
-            print_colored("👁️  Prisma schema file watcher aktivdir", Colors.GREEN)
+            # Prisma qovluğunu izlə
+            prisma_dir = backend_dir / 'prisma'
+            if prisma_dir.exists():
+                observer.schedule(schema_handler, str(prisma_dir), recursive=False)
+                observer.start()
+                print_colored("👁️  Prisma schema file watcher aktivdir", Colors.GREEN)
+                print_colored(f"   İzlənilən qovluq: {prisma_dir}", Colors.CYAN)
+            else:
+                print_colored("⚠️  Prisma qovluğu tapılmadı", Colors.YELLOW)
         except ImportError:
             print_colored("⚠️  watchdog paketi yoxdur - Prisma schema file watching aktiv deyil", Colors.YELLOW)
             print_colored("   Quraşdırmaq üçün: pip install watchdog", Colors.YELLOW)
@@ -717,8 +808,7 @@ def main():
 
         processes.append(('Mobile', mobile_process_3001, Colors.GREEN))
         
-        # Output thread-ləri
-        threads = []
+        # Output thread-ləri (threads artıq yaradılıb)
         for name, proc, color in processes:
             thread = Thread(target=print_output, args=(proc, name, color), daemon=True)
             thread.start()
@@ -731,6 +821,9 @@ def main():
         while True:
             # Process-lərin həyatda olub olmadığını yoxla
             for name, proc, _ in processes:
+                # None prosesləri ignore et (məqsədli olaraq dayandırılmış proseslər)
+                if proc is None:
+                    continue
                 exit_code = proc.poll()
                 if exit_code is not None:
                     if exit_code != 0:
@@ -739,7 +832,7 @@ def main():
                         print_colored(f"⚠️  {name} serveri gözlənilməz şəkildə dayandı!", Colors.YELLOW)
                     # Digər process-ləri də dayandır
                     for n, p, _ in processes:
-                        if p.poll() is None:
+                        if p is not None and p.poll() is None:
                             try:
                                 p.terminate()
                                 p.wait(timeout=3)

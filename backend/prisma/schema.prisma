@@ -3,7 +3,17 @@ generator client {
 }
 
 // Schema updated to include production_date, expiry_date, payment_date, and is_active fields for both sale and purchase invoices - trigger db push - v4 - restart backend
-
+// Schema updated: Added role field to users table for admin/user roles - v5
+// Test: File watcher test - v6 - 2024 - fixed threads variable
+// Test: File watcher test - v7 - testing auto db push
+// Test: File watcher test - v8 - fixed process monitoring to ignore intentional stops
+// Schema updated: Added telefon field to users table - v9 - with progress messages
+// Schema updated: Added full_name field to users table - v10 - testing auto restart
+// Test: File watcher test - v11 - testing Popen with progress messages
+// Test: File watcher test - v12 - final test with improved error handling
+// Test: File watcher test - v13 - monitoring process restart
+// Test: File watcher test - v14 - final verification after cleanup
+// Test: File watcher test - v14 - final verification after cleanup
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -23,6 +33,7 @@ model customers {
   is_active     Boolean?        @default(true)
   sale_invoices sale_invoices[]
   folder        customer_folders? @relation(fields: [folder_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  payments      payments[]
 }
 
 model password_reset_tokens {
@@ -98,6 +109,7 @@ model purchase_invoices {
   invoice_date           DateTime?                @default(now()) @db.Timestamp(6)
   notes                  String?
   is_active              Boolean?                 @default(true) // Active status for purchase invoices
+  is_deleted             Boolean?                 @default(false) // Deleted status for purchase invoices
   created_at             DateTime?                @default(now()) @db.Timestamp(6)
   purchase_invoice_items purchase_invoice_items[]
   suppliers              suppliers?               @relation(fields: [supplier_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -123,6 +135,7 @@ model sale_invoices {
   payment_date       DateTime?            @db.Timestamp(6)
   notes              String?
   is_active          Boolean?             @default(true) // Active status for invoices
+  is_deleted         Boolean?             @default(false) // Deleted status for sale invoices
   created_at         DateTime?            @default(now()) @db.Timestamp(6)
   sale_invoice_items sale_invoice_items[]
   customers          customers?           @relation(fields: [customer_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -141,15 +154,22 @@ model suppliers {
   purchase_invoices purchase_invoices[]
   folder_id         Int?
   folder            supplier_folders?   @relation(fields: [folder_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  payments          payments[]
 }
 
 model users {
   id                    Int                     @id @default(autoincrement())
   email                 String                  @unique @db.VarChar(255)
   password              String                  @db.VarChar(255)
+  role                  String?                 @default("user") @db.VarChar(50) // 'admin', 'user'
+  telefon               String?                 @db.VarChar(50) // Telefon nömrəsi
+  full_name             String?                 @db.VarChar(255) // Tam ad
+  notes                 String?                 @db.Text // Qeydlər
   created_at            DateTime?               @default(now()) @db.Timestamp(6)
   updated_at            DateTime?               @default(now()) @db.Timestamp(6)
   password_reset_tokens password_reset_tokens[]
+  activity_logs         activity_logs[]
+  payments              payments[]
 }
 
 model warehouse {
@@ -180,4 +200,31 @@ model supplier_folders {
   parent     supplier_folders?   @relation("SupplierFolderTree", fields: [parent_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
   children   supplier_folders[]  @relation("SupplierFolderTree")
   suppliers  suppliers[]
+}
+
+model activity_logs {
+  id            Int       @id @default(autoincrement())
+  user_id       Int?
+  action_type   String    @db.VarChar(100) // 'invoice_created', 'invoice_confirmed', 'invoice_deleted', 'warehouse_updated', etc.
+  entity_type   String    @db.VarChar(50)  // 'purchase_invoice', 'sale_invoice', 'warehouse', etc.
+  entity_id     Int?
+  description   String?   // Azərbaycan dilində təsvir: "M001 kodlu maldan 5 dene var idi, 3 denesini SI-0000000001 qaiməsində satdın, qaldı 2si"
+  details       String?   // JSON formatında əlavə məlumatlar
+  created_at    DateTime? @default(now()) @db.Timestamp(6)
+  users         users?    @relation(fields: [user_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+}
+
+model payments {
+  id            Int       @id @default(autoincrement())
+  payment_type  String    @db.VarChar(20)  // 'supplier' (təchizatçıya ödəniş) və ya 'customer' (müştəridən ödəniş)
+  supplier_id   Int?      // Təchizatçıya ödəniş üçün
+  customer_id   Int?      // Müştəridən ödəniş üçün
+  amount        Decimal   @db.Decimal(10, 2) // Ödəniş məbləği
+  payment_date  DateTime? @default(now()) @db.Timestamp(6) // Ödəniş tarixi
+  notes         String?   // Qeydlər
+  created_at    DateTime? @default(now()) @db.Timestamp(6)
+  created_by    Int?      // Ödənişi edən istifadəçi
+  suppliers     suppliers? @relation(fields: [supplier_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  customers     customers? @relation(fields: [customer_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users         users?    @relation(fields: [created_by], references: [id], onDelete: SetNull, onUpdate: NoAction)
 }

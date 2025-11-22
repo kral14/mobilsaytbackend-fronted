@@ -8,6 +8,7 @@ interface NavItem {
   label: string
   icon: string
   requiresAuth?: boolean
+  requiresAdmin?: boolean
 }
 
 const navItems: NavItem[] = [
@@ -22,6 +23,7 @@ const navItems: NavItem[] = [
   { path: '/musteriler/alici', label: 'Alıcılar', icon: '👥', requiresAuth: true },
   { path: '/musteriler/satici', label: 'Satıcılar', icon: '🏢', requiresAuth: true },
   { path: '/profile', label: 'Profil', icon: '👤', requiresAuth: true },
+  { path: '/admin', label: 'Admin', icon: '⚙️', requiresAuth: true, requiresAdmin: true },
 ]
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -151,7 +153,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     setMenuOpen(false)
   }
 
-  const visibleNavItems = navItems.filter(item => !item.requiresAuth || isAuthenticated)
+  const visibleNavItems = navItems.filter(item => {
+    // Auth tələb olunursa, istifadəçi authenticated olmalıdır
+    if (item.requiresAuth && !isAuthenticated) {
+      return false
+    }
+    // Admin tələb olunursa, istifadəçi admin olmalıdır
+    if (item.requiresAdmin && user?.role !== 'admin') {
+      return false
+    }
+    return true
+  })
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -211,8 +223,33 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
 
         {isAuthenticated && (
-          <div style={{ fontSize: '0.875rem', textAlign: 'right' }}>
-            <div style={{ fontWeight: 'bold' }}>{displayName}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {user?.role === 'admin' && (
+              <Link
+                to="/admin"
+                style={{
+                  color: 'white',
+                  textDecoration: 'none',
+                  fontSize: '0.9rem',
+                  padding: '0.5rem 1rem',
+                  background: 'rgba(255,255,255,0.2)',
+                  borderRadius: '6px',
+                  fontWeight: '500',
+                  transition: 'background 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.3)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.2)'
+                }}
+              >
+                ⚙️ Admin
+              </Link>
+            )}
+            <div style={{ fontSize: '0.875rem', textAlign: 'right' }}>
+              <div style={{ fontWeight: 'bold' }}>{displayName}</div>
+            </div>
           </div>
         )}
       </nav>

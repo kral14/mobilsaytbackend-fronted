@@ -1,6 +1,7 @@
 import { Response } from 'express'
 import prisma from '../config/database'
 import { AuthRequest } from '../middleware/auth'
+import { logWarehouseChange, logInvoiceCreated, logInvoiceDeleted, logInvoiceRestored, logCustomerBalanceChange } from '../utils/logger'
 
 // Satış fakturaları (sale_invoices) - bu bizim "orders" kimi işləyir
 export const getAllOrders = async (req: AuthRequest, res: Response) => {
@@ -104,15 +105,27 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
         0,
       )
 
-      // Stok mövcudluğunu əvvəlcədən yoxla
-      for (const item of normalizedItems) {
-        const warehouse = await tx.warehouse.findFirst({
-          where: { product_id: item.product_id },
-        })
-        const currentQuantity = Number(warehouse?.quantity ?? 0)
+      const invoiceIsActive = is_active !== undefined ? Boolean(is_active) : false
 
-        if (!warehouse || currentQuantity < item.quantity) {
-          throw new Error(`Məhsul ID ${item.product_id} üçün anbarda kifayət qədər qalığ yoxdur`)
+      // Yalnız təsdiqlənmiş qaimələr üçün stok yoxlaması və anbar qalığını azalt
+      if (invoiceIsActive) {
+        // Stok mövcudluğunu əvvəlcədən yoxla
+        for (const item of normalizedItems) {
+          const warehouse = await tx.warehouse.findFirst({
+            where: { product_id: item.product_id },
+            include: { products: true },
+          })
+          const currentQuantity = Number(warehouse?.quantity ?? 0)
+
+          if (!warehouse || currentQuantity < item.quantity) {
+            const productName = warehouse?.products?.name || `ID ${item.product_id}`
+            const availableQuantity = currentQuantity
+            if (currentQuantity <= 0) {
+              throw new Error(`Seçilən məhsul "${productName}" üçün anbar qalığı yoxdur və ya azdır. Mövcud qalıq: ${availableQuantity}`)
+            } else {
+              throw new Error(`Seçilən məhsul "${productName}" üçün anbarda kifayət qədər qalığ yoxdur. Mövcud qalıq: ${availableQuantity}, Tələb olunan: ${item.quantity}`)
+            }
+          }
         }
       }
 
@@ -123,7 +136,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
           total_amount: totalAmount,
           notes: notes || null,
           payment_date: payment_date ? new Date(payment_date) : null,
-          is_active: is_active !== undefined ? Boolean(is_active) : false,
+          is_active: invoiceIsActive,
         },
       })
 
@@ -141,22 +154,81 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
         ),
       )
 
-      for (const item of normalizedItems) {
-        const warehouse = await tx.warehouse.findFirst({
-          where: { product_id: item.product_id },
-        })
+      // Yalnız təsdiqlənmiş qaimələr üçün anbar qalığını azalt
+      if (invoiceIsActive) {
+        for (const item of normalizedItems) {
+          const warehouse = await tx.warehouse.findFirst({
+            where: { product_id: item.product_id },
+            include: { products: true },
+          })
 
-        if (!warehouse) {
-          throw new Error(`Məhsul ID ${item.product_id} üçün anbar qeydiyyatı tapılmadı`)
+          if (!warehouse) {
+            throw new Error(`Məhsul ID ${item.product_id} üçün anbar qeydiyyatı tapılmadı`)
+          }
+
+          const oldQuantity = Number(warehouse.quantity || 0)
+          const newQuantity = oldQuantity - item.quantity
+
+          await tx.warehouse.update({
+            where: { id: warehouse.id },
+            data: {
+              quantity: newQuantity,
+            },
+          })
+
+          // Log yaz
+          await logWarehouseChange(
+            req.userId,
+            item.product_id,
+            warehouse.products?.name || `ID ${item.product_id}`,
+            warehouse.products?.code || null,
+            oldQuantity,
+            newQuantity,
+            -item.quantity,
+            invoiceNumber,
+            'sale',
+            'confirmed'
+          )
         }
 
-        await tx.warehouse.update({
-          where: { id: warehouse.id },
-          data: {
-            quantity: Number(warehouse.quantity || 0) - item.quantity,
-          },
-        })
+        // Müştərinin balansını artır (onların borcu artır)
+        if (customer_id) {
+          const customer = await tx.customers.findUnique({
+            where: { id: customer_id },
+          })
+          if (customer) {
+            const currentBalance = Number(customer.balance || 0)
+            const newBalance = currentBalance + totalAmount
+            await tx.customers.update({
+              where: { id: customer_id },
+              data: {
+                balance: newBalance,
+              },
+            })
+            
+            // Log yaz
+            await logCustomerBalanceChange(
+              req.userId,
+              customer_id,
+              customer.name,
+              currentBalance,
+              newBalance,
+              totalAmount,
+              invoiceNumber,
+              'invoice_confirmed'
+            )
+          }
+        }
       }
+
+      // Qaimə yaradıldığı üçün log yaz
+      await logInvoiceCreated(
+        req.userId,
+        invoice.id,
+        invoiceNumber,
+        'sale',
+        customer_id ? (await tx.customers.findUnique({ where: { id: customer_id } }))?.name || null : null
+      )
 
       return tx.sale_invoices.findUnique({
         where: { id: invoice.id },
@@ -197,21 +269,61 @@ export const updateOrder = async (req: AuthRequest, res: Response) => {
         throw new Error('NOT_FOUND')
       }
 
-      // Köhnə item-lərin stokunu geri qaytar
-      for (const item of invoice.sale_invoice_items) {
-        if (!item.product_id) {
-          continue
-        }
-        const warehouse = await tx.warehouse.findFirst({
-          where: { product_id: item.product_id },
-        })
-        if (warehouse) {
-          await tx.warehouse.update({
-            where: { id: warehouse.id },
-            data: {
-              quantity: Number(warehouse.quantity || 0) + Number(item.quantity),
-            },
+      // Köhnə item-lərin stokunu geri qaytar (yalnız təsdiqlənmiş qaimələr üçün)
+      if (invoice.is_active) {
+        for (const item of invoice.sale_invoice_items) {
+          if (!item.product_id) {
+            continue
+          }
+          const warehouse = await tx.warehouse.findFirst({
+            where: { product_id: item.product_id },
           })
+          if (warehouse) {
+            await tx.warehouse.update({
+              where: { id: warehouse.id },
+              data: {
+                quantity: Number(warehouse.quantity || 0) + Number(item.quantity),
+              },
+            })
+          } else {
+            await tx.warehouse.create({
+              data: {
+                product_id: item.product_id,
+                quantity: Number(item.quantity),
+              },
+            })
+          }
+        }
+
+        // Köhnə müştərinin balansını azalt (onların borcu azalır)
+        if (invoice.customer_id) {
+          const oldCustomer = await tx.customers.findUnique({
+            where: { id: invoice.customer_id },
+          })
+          if (oldCustomer) {
+            const oldTotalAmount = Number(invoice.total_amount || 0)
+            const currentBalance = Number(oldCustomer.balance || 0)
+            // Mənfi balans ola bilər (ödəniş borcdan çoxdursa)
+            const newBalance = currentBalance - oldTotalAmount
+            await tx.customers.update({
+              where: { id: invoice.customer_id },
+              data: {
+                balance: newBalance,
+              },
+            })
+            
+            // Log yaz
+            await logCustomerBalanceChange(
+              req.userId,
+              invoice.customer_id,
+              oldCustomer.name,
+              currentBalance,
+              newBalance,
+              -oldTotalAmount,
+              invoice.invoice_number,
+              'invoice_unconfirmed'
+            )
+          }
         }
       }
 
@@ -228,14 +340,25 @@ export const updateOrder = async (req: AuthRequest, res: Response) => {
           total_price: Number(item.total_price),
         }))
 
-        for (const item of normalizedItems) {
-          const warehouse = await tx.warehouse.findFirst({
-            where: { product_id: item.product_id },
-          })
-          const currentQuantity = Number(warehouse?.quantity ?? 0)
+        // Yalnız təsdiqlənmiş qaimələr üçün stok yoxlaması və anbar qalığını azalt
+        const newIsActive = invoice.is_active // Mövcud statusu saxla
+        if (newIsActive) {
+          for (const item of normalizedItems) {
+            const warehouse = await tx.warehouse.findFirst({
+              where: { product_id: item.product_id },
+              include: { products: true },
+            })
+            const currentQuantity = Number(warehouse?.quantity ?? 0)
 
-          if (!warehouse || currentQuantity < item.quantity) {
-            throw new Error(`Məhsul ID ${item.product_id} üçün anbarda kifayət qədər qalığ yoxdur`)
+            if (!warehouse || currentQuantity < item.quantity) {
+              const productName = warehouse?.products?.name || `ID ${item.product_id}`
+              const availableQuantity = currentQuantity
+              if (currentQuantity <= 0) {
+                throw new Error(`Seçilən məhsul "${productName}" üçün anbar qalığı yoxdur və ya azdır. Mövcud qalıq: ${availableQuantity}`)
+              } else {
+                throw new Error(`Seçilən məhsul "${productName}" üçün anbarda kifayət qədər qalığ yoxdur. Mövcud qalıq: ${availableQuantity}, Tələb olunan: ${item.quantity}`)
+              }
+            }
           }
         }
 
@@ -253,19 +376,22 @@ export const updateOrder = async (req: AuthRequest, res: Response) => {
           ),
         )
 
-        for (const item of normalizedItems) {
-          const warehouse = await tx.warehouse.findFirst({
-            where: { product_id: item.product_id },
-          })
-          if (!warehouse) {
-            throw new Error(`Məhsul ID ${item.product_id} üçün anbar qeydiyyatı tapılmadı`)
+        // Yalnız təsdiqlənmiş qaimələr üçün anbar qalığını azalt
+        if (newIsActive) {
+          for (const item of normalizedItems) {
+            const warehouse = await tx.warehouse.findFirst({
+              where: { product_id: item.product_id },
+            })
+            if (!warehouse) {
+              throw new Error(`Məhsul ID ${item.product_id} üçün anbar qeydiyyatı tapılmadı`)
+            }
+            await tx.warehouse.update({
+              where: { id: warehouse.id },
+              data: {
+                quantity: Number(warehouse.quantity || 0) - item.quantity,
+              },
+            })
           }
-          await tx.warehouse.update({
-            where: { id: warehouse.id },
-            data: {
-              quantity: Number(warehouse.quantity || 0) - item.quantity,
-            },
-          })
         }
       }
 
@@ -276,6 +402,39 @@ export const updateOrder = async (req: AuthRequest, res: Response) => {
               0,
             )
           : invoice.total_amount
+
+      // Yeni müştərinin balansını artır (onların borcu artır)
+      const newIsActive = invoice.is_active // Mövcud statusu saxla
+      if (newIsActive) {
+        const newCustomerId = customer_id !== undefined ? (customer_id ? Number(customer_id) : null) : invoice.customer_id
+        if (newCustomerId) {
+          const newCustomer = await tx.customers.findUnique({
+            where: { id: newCustomerId },
+          })
+          if (newCustomer) {
+            const currentBalance = Number(newCustomer.balance || 0)
+            const newBalance = currentBalance + totalAmount
+            await tx.customers.update({
+              where: { id: newCustomerId },
+              data: {
+                balance: newBalance,
+              },
+            })
+            
+            // Log yaz
+            await logCustomerBalanceChange(
+              req.userId,
+              newCustomerId,
+              newCustomer.name,
+              currentBalance,
+              newBalance,
+              totalAmount,
+              invoice.invoice_number,
+              'invoice_confirmed'
+            )
+          }
+        }
+      }
 
       return tx.sale_invoices.update({
         where: { id: invoice.id },
@@ -314,32 +473,498 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
     const { id } = req.params
     const { is_active } = req.body
 
-    const invoice = await prisma.sale_invoices.findUnique({
-      where: { id: parseInt(id) },
-    })
+    // Log məlumatlarını toplamaq üçün
+    const logPromises: Promise<void>[] = []
 
-    if (!invoice) {
-      return res.status(404).json({ message: 'Qaimə tapılmadı' })
-    }
-
-    const updatedInvoice = await prisma.sale_invoices.update({
-      where: { id: parseInt(id) },
-      data: {
-        ...(is_active !== undefined && { is_active }),
-      },
-      include: {
-        customers: true,
-        sale_invoice_items: {
-          include: {
-            products: true,
+    const updatedInvoice = await prisma.$transaction(async (tx) => {
+      const invoice = await tx.sale_invoices.findUnique({
+        where: { id: parseInt(id) },
+        include: {
+          sale_invoice_items: {
+            include: {
+              products: true,
+            },
           },
         },
-      },
+      })
+
+      if (!invoice) {
+        throw new Error('NOT_FOUND')
+      }
+
+      // Silinmiş qaimələri təsdiqləmək olmaz
+      if (invoice.is_deleted) {
+        throw new Error('CANNOT_CONFIRM_DELETED')
+      }
+
+      const oldIsActive = invoice.is_active
+      const newIsActive = Boolean(is_active)
+
+      // Status dəyişikliyi yalnız fərqli olduqda anbar qalığına və balansa təsir edir
+      if (oldIsActive !== newIsActive) {
+        const totalAmount = Number(invoice.total_amount || 0)
+        
+        if (newIsActive) {
+          // Təsdiqlənir - anbar qalığını azalt (satış qaiməsi)
+          // Frontend-də artıq yoxlama edilir, burada yalnız azaltırıq (mənfiyə də gedə bilər)
+          for (const item of invoice.sale_invoice_items) {
+            if (!item.product_id) {
+              continue
+            }
+            const warehouse = await tx.warehouse.findFirst({
+              where: { product_id: item.product_id },
+            })
+
+            if (warehouse) {
+              const currentQuantity = Number(warehouse.quantity || 0)
+              const itemQuantity = Number(item.quantity)
+              // Anbar qalığı mənfiyə gedə bilər (satış qaiməsi üçün)
+              const newQuantity = currentQuantity - itemQuantity
+              await tx.warehouse.update({
+                where: { id: warehouse.id },
+                data: {
+                  quantity: newQuantity,
+                },
+              })
+
+              // Log yaz (transaction-dan sonra)
+              logPromises.push(
+                logWarehouseChange(
+                  req.userId,
+                  item.product_id,
+                  item.products?.name || `ID ${item.product_id}`,
+                  item.products?.code || null,
+                  currentQuantity,
+                  newQuantity,
+                  -itemQuantity,
+                  invoice.invoice_number,
+                  'sale',
+                  'confirmed'
+                )
+              )
+            } else {
+              // Warehouse yoxdursa, yaradırıq mənfi qalıqla
+              const newWarehouse = await tx.warehouse.create({
+                data: {
+                  product_id: item.product_id,
+                  quantity: -Number(item.quantity),
+                },
+                include: { products: true },
+              })
+
+              // Log yaz (transaction-dan sonra)
+              logPromises.push(
+                logWarehouseChange(
+                  req.userId,
+                  item.product_id,
+                  item.products?.name || newWarehouse.products?.name || `ID ${item.product_id}`,
+                  item.products?.code || newWarehouse.products?.code || null,
+                  0,
+                  -Number(item.quantity),
+                  -Number(item.quantity),
+                  invoice.invoice_number,
+                  'sale',
+                  'confirmed'
+                )
+              )
+            }
+          }
+
+          // Müştərinin balansını artır (onların borcu artır)
+          if (invoice.customer_id) {
+            const customer = await tx.customers.findUnique({
+              where: { id: invoice.customer_id },
+            })
+            if (customer) {
+              const currentBalance = Number(customer.balance || 0)
+              const newBalance = currentBalance + totalAmount
+              await tx.customers.update({
+                where: { id: invoice.customer_id },
+                data: {
+                  balance: newBalance,
+                },
+              })
+              
+              // Log yaz (transaction-dan sonra)
+              logPromises.push(
+                logCustomerBalanceChange(
+                  req.userId,
+                  invoice.customer_id,
+                  customer.name,
+                  currentBalance,
+                  newBalance,
+                  totalAmount,
+                  invoice.invoice_number,
+                  'invoice_confirmed'
+                )
+              )
+            }
+          }
+        } else {
+          // Təsdiqsiz edilir - anbar qalığını artır (satış qaiməsi geri qaytarılır)
+          for (const item of invoice.sale_invoice_items) {
+            if (!item.product_id) {
+              continue
+            }
+            const warehouse = await tx.warehouse.findFirst({
+              where: { product_id: item.product_id },
+              include: { products: true },
+            })
+
+            if (warehouse) {
+              const oldQuantity = Number(warehouse.quantity || 0)
+              const newQuantity = oldQuantity + Number(item.quantity)
+              await tx.warehouse.update({
+                where: { id: warehouse.id },
+                data: {
+                  quantity: newQuantity,
+                },
+              })
+
+              // Log yaz (transaction-dan sonra)
+              logPromises.push(
+                logWarehouseChange(
+                  req.userId,
+                  item.product_id,
+                  item.products?.name || warehouse.products?.name || `ID ${item.product_id}`,
+                  item.products?.code || warehouse.products?.code || null,
+                  oldQuantity,
+                  newQuantity,
+                  Number(item.quantity),
+                  invoice.invoice_number,
+                  'sale',
+                  'unconfirmed'
+                )
+              )
+            } else {
+              const newWarehouse = await tx.warehouse.create({
+                data: {
+                  product_id: item.product_id,
+                  quantity: Number(item.quantity),
+                },
+                include: { products: true },
+              })
+
+              // Log yaz (transaction-dan sonra)
+              logPromises.push(
+                logWarehouseChange(
+                  req.userId,
+                  item.product_id,
+                  item.products?.name || newWarehouse.products?.name || `ID ${item.product_id}`,
+                  item.products?.code || newWarehouse.products?.code || null,
+                  0,
+                  Number(item.quantity),
+                  Number(item.quantity),
+                  invoice.invoice_number,
+                  'sale',
+                  'unconfirmed'
+                )
+              )
+            }
+          }
+
+          // Müştərinin balansını azalt (onların borcu azalır)
+          if (invoice.customer_id) {
+            const customer = await tx.customers.findUnique({
+              where: { id: invoice.customer_id },
+            })
+            if (customer) {
+              const currentBalance = Number(customer.balance || 0)
+              // Mənfi balans ola bilər (ödəniş borcdan çoxdursa)
+              const newBalance = currentBalance - totalAmount
+              await tx.customers.update({
+                where: { id: invoice.customer_id },
+                data: {
+                  balance: newBalance,
+                },
+              })
+              
+              // Log yaz (transaction-dan sonra)
+              logPromises.push(
+                logCustomerBalanceChange(
+                  req.userId,
+                  invoice.customer_id,
+                  customer.name,
+                  currentBalance,
+                  newBalance,
+                  -totalAmount,
+                  invoice.invoice_number,
+                  'invoice_unconfirmed'
+                )
+              )
+            }
+          }
+        }
+      }
+
+      return tx.sale_invoices.update({
+        where: { id: parseInt(id) },
+        data: {
+          is_active: newIsActive,
+        },
+        include: {
+          customers: true,
+          sale_invoice_items: {
+            include: {
+              products: true,
+            },
+          },
+        },
+      })
+    }, {
+      maxWait: 10000, // 10 saniyə gözlə
+      timeout: 20000, // 20 saniyə timeout
+    })
+
+    // Log yazmalarını transaction-dan sonra et (async)
+    Promise.all(logPromises).catch(err => {
+      console.error('❌ [ERROR] Log yazılarkən xəta:', err)
     })
 
     res.json(updatedInvoice)
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === 'NOT_FOUND') {
+      return res.status(404).json({ message: 'Qaimə tapılmadı' })
+    }
+    if (error.message === 'CANNOT_CONFIRM_DELETED') {
+      return res.status(400).json({ message: 'Silinmiş qaiməni təsdiqləmək olmaz' })
+    }
     console.error('Update order status error:', error)
     res.status(500).json({ message: 'Qaimə statusu yenilənərkən xəta baş verdi' })
+  }
+}
+
+// Satış qaiməsini sil (soft delete)
+export const deleteOrder = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params
+
+    await prisma.$transaction(async (tx) => {
+      const invoice = await tx.sale_invoices.findUnique({
+        where: { id: parseInt(id) },
+        include: {
+          sale_invoice_items: true,
+        },
+      })
+
+      if (!invoice) {
+        throw new Error('NOT_FOUND')
+      }
+
+      // Yalnız təsdiqlənmiş qaimələr üçün anbar qalığını artır (satış qaiməsi silinir)
+      if (invoice.is_active) {
+        for (const item of invoice.sale_invoice_items) {
+          if (!item.product_id) {
+            continue
+          }
+          const warehouse = await tx.warehouse.findFirst({
+            where: { product_id: item.product_id },
+            include: { products: true },
+          })
+
+          if (warehouse) {
+            const oldQuantity = Number(warehouse.quantity || 0)
+            const newQuantity = oldQuantity + Number(item.quantity)
+            await tx.warehouse.update({
+              where: { id: warehouse.id },
+              data: {
+                quantity: newQuantity,
+              },
+            })
+
+            // Log yaz
+            await logWarehouseChange(
+              req.userId,
+              item.product_id,
+              warehouse.products?.name || `ID ${item.product_id}`,
+              warehouse.products?.code || null,
+              oldQuantity,
+              newQuantity,
+              Number(item.quantity),
+              invoice.invoice_number,
+              'sale',
+              'deleted'
+            )
+          } else {
+            const newWarehouse = await tx.warehouse.create({
+              data: {
+                product_id: item.product_id,
+                quantity: Number(item.quantity),
+              },
+              include: { products: true },
+            })
+
+            // Log yaz
+            await logWarehouseChange(
+              req.userId,
+              item.product_id,
+              newWarehouse.products?.name || `ID ${item.product_id}`,
+              newWarehouse.products?.code || null,
+              0,
+              Number(item.quantity),
+              Number(item.quantity),
+              invoice.invoice_number,
+              'sale',
+              'deleted'
+            )
+          }
+        }
+
+        // Müştərinin balansını azalt (onların borcu azalır)
+        if (invoice.customer_id) {
+          const customer = await tx.customers.findUnique({
+            where: { id: invoice.customer_id },
+          })
+          if (customer) {
+            const totalAmount = Number(invoice.total_amount || 0)
+            const currentBalance = Number(customer.balance || 0)
+            const newBalance = Math.max(0, currentBalance - totalAmount)
+            await tx.customers.update({
+              where: { id: invoice.customer_id },
+              data: {
+                balance: newBalance,
+              },
+            })
+            
+            // Log yaz
+            await logCustomerBalanceChange(
+              req.userId,
+              invoice.customer_id,
+              customer.name,
+              currentBalance,
+              newBalance,
+              -totalAmount,
+              invoice.invoice_number,
+              'invoice_deleted'
+            )
+          }
+        }
+      }
+
+      // Qaiməni silmək əvəzinə, onu silinmiş kimi qeyd et (is_deleted = true, is_active = false)
+      await tx.sale_invoices.update({
+        where: { id: parseInt(id) },
+        data: {
+          is_deleted: true,
+          is_active: false,
+        },
+      })
+    })
+
+    // Qaimə silindi log
+    const invoice = await prisma.sale_invoices.findUnique({
+      where: { id: parseInt(id) },
+    })
+    if (invoice) {
+      await logInvoiceDeleted(req.userId, invoice.id, invoice.invoice_number, 'sale')
+    }
+
+    res.json({ message: 'Satış qaiməsi silindi' })
+  } catch (error: any) {
+    if (error.message === 'NOT_FOUND') {
+      return res.status(404).json({ message: 'Qaimə tapılmadı' })
+    }
+    console.error('Delete order error:', error)
+    console.error('Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2))
+    res.status(500).json({ 
+      message: 'Satış qaiməsi silinərkən xəta baş verdi',
+      error: error.message,
+      code: error.code,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    })
+  }
+}
+
+// Silinmiş satış qaiməsini geri qaytar (təsdiqsiz olaraq)
+export const restoreOrder = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params
+
+    const restoredInvoice = await prisma.$transaction(async (tx) => {
+      const invoice = await tx.sale_invoices.findUnique({
+        where: { id: parseInt(id) },
+      })
+
+      if (!invoice) {
+        throw new Error('NOT_FOUND')
+      }
+
+      if (!invoice.is_deleted) {
+        throw new Error('ALREADY_ACTIVE')
+      }
+
+      // Qaiməni geri qaytar, amma təsdiqsiz olaraq saxla
+      return tx.sale_invoices.update({
+        where: { id: parseInt(id) },
+        data: {
+          is_deleted: false,
+          is_active: false, // Təsdiqsiz olaraq saxla
+        },
+        include: {
+          customers: true,
+          sale_invoice_items: {
+            include: {
+              products: true,
+            },
+          },
+        },
+      })
+    })
+
+    // Qaimə geri qaytarıldı log
+    await logInvoiceRestored(req.userId, restoredInvoice.id, restoredInvoice.invoice_number, 'sale')
+
+    res.json(restoredInvoice)
+  } catch (error: any) {
+    if (error.message === 'NOT_FOUND') {
+      return res.status(404).json({ message: 'Qaimə tapılmadı' })
+    }
+    if (error.message === 'ALREADY_ACTIVE') {
+      return res.status(400).json({ message: 'Qaimə artıq aktivdir' })
+    }
+    console.error('Restore order error:', error)
+    res.status(500).json({ message: 'Qaimə geri qaytarılarkən xəta baş verdi' })
+  }
+}
+
+// Məhsulların anbar qalığını yoxla
+export const checkWarehouseStock = async (req: AuthRequest, res: Response) => {
+  try {
+    const { items } = req.body // items: [{ product_id, quantity }]
+
+    if (!items || !Array.isArray(items)) {
+      return res.status(400).json({ message: 'Məhsullar siyahısı tələb olunur' })
+    }
+
+    const stockChecks = await Promise.all(
+      items.map(async (item: { product_id: number; quantity: number }) => {
+        const warehouse = await prisma.warehouse.findFirst({
+          where: { product_id: item.product_id },
+          include: { products: true },
+        })
+        const currentQuantity = Number(warehouse?.quantity ?? 0)
+        const requiredQuantity = Number(item.quantity)
+
+        return {
+          product_id: item.product_id,
+          product_name: warehouse?.products?.name || `ID ${item.product_id}`,
+          available_quantity: currentQuantity,
+          required_quantity: requiredQuantity,
+          is_sufficient: currentQuantity >= requiredQuantity,
+          will_be_negative: currentQuantity < requiredQuantity,
+        }
+      })
+    )
+
+    const insufficientItems = stockChecks.filter(check => !check.is_sufficient)
+
+    res.json({
+      checks: stockChecks,
+      has_insufficient_stock: insufficientItems.length > 0,
+      insufficient_items: insufficientItems,
+    })
+  } catch (error: any) {
+    console.error('Check warehouse stock error:', error)
+    res.status(500).json({ message: 'Anbar qalığı yoxlanılarkən xəta baş verdi' })
   }
 }

@@ -475,6 +475,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </div>
 
               <span>{displayName}</span>
+              {user?.role === 'admin' && (
+                <Link 
+                  to="/admin" 
+                  style={{ 
+                    color: 'white', 
+                    textDecoration: 'none',
+                    padding: '0.5rem 1rem',
+                    background: 'rgba(255,255,255,0.1)',
+                    borderRadius: '4px',
+                    fontWeight: '500',
+                  }}
+                >
+                  ⚙️ Admin
+                </Link>
+              )}
               <Link to="/profile" style={{ color: 'white', textDecoration: 'none' }}>
                 Profil
               </Link>

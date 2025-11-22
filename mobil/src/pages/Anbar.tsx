@@ -275,6 +275,12 @@ export default function Alicilar() {
       code: true,
       article: true,
       barcode: true,
+      type: true,
+      brand: true,
+      model: true,
+      color: true,
+      country: true,
+      manufacturer: true,
       unit: true,
       purchase_price: true,
       sale_price: true,
@@ -332,6 +338,12 @@ export default function Alicilar() {
       'code',
       'article',
       'barcode',
+      'type',
+      'brand',
+      'model',
+      'color',
+      'country',
+      'manufacturer',
       'unit',
       'purchase_price',
       'sale_price',
@@ -347,7 +359,15 @@ export default function Alicilar() {
       if (!Array.isArray(parsed) || !parsed.includes('id')) {
         return defaultOrder
       }
-      return parsed
+      // Yeni əlavə etdiyimiz sütunlar (məsələn, article, type, brand və s.)
+      // əvvəlki localStorage konfiqurasiyasında yoxdursa, sona əlavə edirik
+      const merged: string[] = [...parsed]
+      for (const key of defaultOrder) {
+        if (!merged.includes(key)) {
+          merged.push(key)
+        }
+      }
+      return merged
     } catch {
       return defaultOrder
     }
@@ -360,6 +380,12 @@ export default function Alicilar() {
       name: 200,
       code: 110,
       article: 110,
+      type: 120,
+      brand: 120,
+      model: 120,
+      color: 90,
+      country: 120,
+      manufacturer: 150,
       barcode: 150,
       unit: 80,
       purchase_price: 120,
@@ -747,6 +773,12 @@ export default function Alicilar() {
     name: { label: 'Məhsul adı', align: 'left' },
     code: { label: 'Kod', align: 'left' },
     article: { label: 'Artikul', align: 'left' },
+    type: { label: 'Növ/Tip', align: 'left' },
+    brand: { label: 'Marka', align: 'left' },
+    model: { label: 'Model', align: 'left' },
+    color: { label: 'Rəng', align: 'left' },
+    country: { label: 'Ölkə', align: 'left' },
+    manufacturer: { label: 'İstehsalçı', align: 'left' },
     barcode: { label: 'Barkod', align: 'left' },
     unit: { label: 'Vahid', align: 'left' },
     purchase_price: { label: 'Alış qiyməti', align: 'right' },
@@ -771,6 +803,12 @@ export default function Alicilar() {
       'code',
       'article',
       'barcode',
+      'type',
+      'brand',
+      'model',
+      'color',
+      'country',
+      'manufacturer',
       'unit',
       'purchase_price',
       'sale_price',
@@ -785,6 +823,12 @@ export default function Alicilar() {
       name: 200,
       code: 110,
       article: 110,
+      type: 120,
+      brand: 120,
+      model: 120,
+      color: 90,
+      country: 120,
+      manufacturer: 150,
       barcode: 150,
       unit: 80,
       purchase_price: 120,
@@ -800,6 +844,12 @@ export default function Alicilar() {
       name: true,
       code: true,
       article: true,
+      type: true,
+      brand: true,
+      model: true,
+      color: true,
+      country: true,
+      manufacturer: true,
       barcode: true,
       unit: true,
       purchase_price: true,
@@ -3836,6 +3886,24 @@ export default function Alicilar() {
                               cellStyle.color = '#666'
                               cellStyle.fontFamily = 'monospace'
                               cellContent = (product as any).article || '-'
+                            } else if (columnKey === 'type') {
+                              cellStyle.color = '#666'
+                              cellContent = (product as any).type || ''
+                            } else if (columnKey === 'brand') {
+                              cellStyle.color = '#666'
+                              cellContent = (product as any).brand || ''
+                            } else if (columnKey === 'model') {
+                              cellStyle.color = '#666'
+                              cellContent = (product as any).model || ''
+                            } else if (columnKey === 'color') {
+                              cellStyle.color = '#666'
+                              cellContent = (product as any).color || ''
+                            } else if (columnKey === 'country') {
+                              cellStyle.color = '#666'
+                              cellContent = (product as any).country || ''
+                            } else if (columnKey === 'manufacturer') {
+                              cellStyle.color = '#666'
+                              cellContent = (product as any).manufacturer || ''
                             } else if (columnKey === 'name') {
                               cellStyle.fontWeight = isSelected ? 'bold' : 'normal'
                               cellContent = product.name

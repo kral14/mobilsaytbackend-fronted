@@ -7,6 +7,20 @@ import { purchaseInvoicesAPI, productsAPI, suppliersAPI } from '../../services/a
 import type { PurchaseInvoice, Product, Supplier } from '@shared/types'
 import { useWindowStore } from '../../store/windowStore'
 
+// Köhnə alış qaimə nömrələrini yeni formata çevirən helper
+// Köhnə: PI-0000000002 və s.
+// Yeni:  AL00000002
+const formatPurchaseInvoiceNumber = (raw: string | null | undefined): string => {
+  if (!raw) return ''
+  const str = String(raw)
+  if (str.startsWith('AL')) return str
+  const match = str.match(/(\d+)/)
+  if (!match) return str
+  const num = Number(match[1])
+  if (!Number.isFinite(num)) return str
+  return `AL${String(num).padStart(8, '0')}`
+}
+
 const defaultColumns: ColumnConfig[] = [
   { id: 'checkbox', label: '', visible: true, width: 50, order: 0 },
   { 
@@ -43,8 +57,29 @@ const defaultColumns: ColumnConfig[] = [
       return <span style={{ fontSize: '1.2rem' }}>📄</span>
     }
   },
-  { id: 'id', label: 'ID', visible: true, width: 80, order: 2 },
-  { id: 'invoice_number', label: 'Faktura №', visible: true, width: 150, order: 3 },
+  { 
+    id: 'id', 
+    label: 'ID', 
+    visible: true, 
+    width: 80, 
+    order: 2,
+    align: 'center',
+    render: (value: any) => {
+      if (value === null || value === undefined) return ''
+      const num = Number(value)
+      if (!Number.isFinite(num)) return String(value)
+      // A00000001 formatında göstər
+      return `A${String(num).padStart(8, '0')}`
+    }
+  },
+  { 
+    id: 'invoice_number', 
+    label: 'Faktura №', 
+    visible: true, 
+    width: 150, 
+    order: 3,
+    render: (value: any) => formatPurchaseInvoiceNumber(value)
+  },
   { id: 'supplier_name', label: 'Təchizatçı', visible: true, width: 200, order: 4 },
   { id: 'invoice_date', label: 'Tarix', visible: true, width: 120, order: 5 },
   { id: 'total_amount', label: 'Ümumi məbləğ', visible: true, width: 150, order: 6, align: 'right' },
@@ -429,7 +464,8 @@ export default function AlisQaimeleri() {
           selectedSupplier: fullInvoice?.suppliers || null,
           invoiceItems: items,
           notes: fullInvoice?.notes || '',
-          invoiceNumber: fullInvoice?.invoice_number || '',
+          // Modal içində də həmişə yeni formatı göstər (AL000000..) 
+          invoiceNumber: formatPurchaseInvoiceNumber(fullInvoice?.invoice_number || ''),
           invoiceDate: invoiceDateStr
         }
       }
@@ -446,7 +482,10 @@ export default function AlisQaimeleri() {
       const windowId = `purchase-invoice-modal-${modalId}`
       addWindow({
         id: windowId,
-        title: invoiceId ? `Qaimə #${fullInvoice?.invoice_number || invoiceId}` : 'Yeni Alış Qaiməsi',
+        // Başlıqda da köhnə PI-... nömrələrini yeni AL... formatında göstər
+        title: invoiceId 
+          ? `Qaimə #${formatPurchaseInvoiceNumber(fullInvoice?.invoice_number || String(invoiceId))}` 
+          : 'Yeni Alış Qaiməsi',
         type: 'modal',
         modalType: 'invoice-edit',
         isVisible: true,
