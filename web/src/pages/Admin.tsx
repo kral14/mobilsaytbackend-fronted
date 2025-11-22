@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { logsAPI, usersAPI } from '../services/api'
+import type { User } from '@shared/types'
 
 interface Log {
   id: number
@@ -16,14 +17,6 @@ interface Log {
     id: number
     email: string
   } | null
-}
-
-interface User {
-  id: number
-  email: string
-  role: string | null
-  created_at: string | null
-  updated_at: string | null
 }
 
 export default function Admin() {
@@ -150,8 +143,9 @@ export default function Admin() {
     }
   }, [activeTab, page, filters])
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
+  const formatDate = (dateString: string | Date | null) => {
+    if (!dateString) return '-'
+    const date = dateString instanceof Date ? dateString : new Date(dateString)
     return date.toLocaleString('az-AZ', {
       year: 'numeric',
       month: '2-digit',
