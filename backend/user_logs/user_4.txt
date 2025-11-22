@@ -1,0 +1,229 @@
+=== İstifadəçi Log Faylı ===
+İstifadəçi ID: 4
+Email: nkelesov@gmail.com
+Tam ad: Naməlum
+Yaradılma tarixi: 22.11.2025, 18:04:43
+===========================================
+
+[22.11.2025, 05:01:35] 📦 Anbar qalığı təsdiqləndi
+   Tip: Anbar (ID: 3)
+   003451 kodlu "Zan" məhsulundan 0 ədəd var idi, 1 ədədi AL00000001 alış qaiməsində təsdiqləndi, qaldı 1 ədəd
+   Qaimə nömrəsi: AL00000001
+   Məhsul: Zan (003451)
+   Qalıq: 0 → 1 (+1)
+
+[22.11.2025, 05:01:37] 📦 Anbar qalığı təsdiqləndi
+   Tip: Anbar (ID: 8)
+   629652 kodlu "dancing" məhsulundan 0 ədəd var idi, 1 ədədi AL00000001 alış qaiməsində təsdiqləndi, qaldı 1 ədəd
+   Qaimə nömrəsi: AL00000001
+   Məhsul: dancing (629652)
+   Qalıq: 0 → 1 (+1)
+
+[22.11.2025, 05:01:38] supplier_balance_changed
+   Tip: supplier (ID: 2)
+   merhemet təchizatçısının borcu AL00000001 qaiməsi səbəbindən dəyişdi. Köhnə borc: 0.00 AZN, Yeni borc: 53.00 AZN (+53.00 AZN) - alış qaiməsi təsdiqləndi
+   Qaimə nömrəsi: AL00000001
+
+[22.11.2025, 05:01:38] 📝 Qaimə yaradıldı
+   Tip: Alış qaiməsi (ID: 50)
+   AL00000001 nömrəli alış qaiməsi yaradıldı. Təchizatçı: merhemet
+   Qaimə nömrəsi: AL00000001
+
+[22.11.2025, 05:23:27] 📝 Qaimə yaradıldı
+   Tip: Satış qaiməsi (ID: 21)
+   SI-0000000001 nömrəli satış qaiməsi yaradıldı. Müştəri: Rehime
+   Qaimə nömrəsi: SI-0000000001
+
+[22.11.2025, 05:23:30] 📦 Anbar qalığı təsdiqləndi
+   Tip: Anbar (ID: 3)
+   003451 kodlu "Zan" məhsulundan 2 ədəd var idi, 5 ədədi SI-0000000001 satış qaiməsində təsdiqləndi və satıldı, qaldı -3 ədəd
+   Qaimə nömrəsi: SI-0000000001
+   Məhsul: Zan (003451)
+   Qalıq: 2 → -3 (-5)
+
+[22.11.2025, 05:23:30] customer_balance_changed
+   Tip: customer (ID: 2)
+   Rehime müştərisinin borcu SI-0000000001 qaiməsi səbəbindən dəyişdi. Köhnə borc: 0.00 AZN, Yeni borc: 175.00 AZN (+175.00 AZN) - satış qaiməsi təsdiqləndi
+   Qaimə nömrəsi: SI-0000000001
+
+[22.11.2025, 05:24:20] payment_deleted
+   Tip: payment (ID: 1)
+   merhemet təchizatçısına edilən 20 AZN ödəniş geri qaytarıldı. Köhnə borc: 106 AZN, Yeni borc: 126 AZN
+
+[22.11.2025, 05:24:39] payment_created
+   Tip: payment (ID: 2)
+   merhemet təchizatçısına 200 AZN ödəniş edildi. Köhnə borc: 126 AZN, Yeni borc: 0 AZN
+
+[22.11.2025, 05:30:53] 📦 Anbar qalığı təsdiqsiz edildi
+   Tip: Anbar (ID: 3)
+   003451 kodlu "Zan" məhsulundan -3 ədəd var idi, 1 ədədi AL00000002 alış qaiməsində təsdiqsiz edildi, qaldı 0 ədəd
+   Qaimə nömrəsi: AL00000002
+   Məhsul: Zan (003451)
+   Qalıq: -3 → 0 (-1)
+
+[22.11.2025, 05:30:53] 📦 Anbar qalığı təsdiqsiz edildi
+   Tip: Anbar (ID: 8)
+   629652 kodlu "dancing" məhsulundan 2 ədəd var idi, 1 ədədi AL00000002 alış qaiməsində təsdiqsiz edildi, qaldı 1 ədəd
+   Qaimə nömrəsi: AL00000002
+   Məhsul: dancing (629652)
+   Qalıq: 2 → 1 (-1)
+
+[22.11.2025, 05:30:54] supplier_balance_changed
+   Tip: supplier (ID: 2)
+   merhemet təchizatçısının borcu AL00000002 qaiməsi səbəbindən dəyişdi. Köhnə borc: 0.00 AZN, Yeni borc: 0.00 AZN (-53.00 AZN) - alış qaiməsi təsdiqsiz edildi
+   Qaimə nömrəsi: AL00000002
+
+[22.11.2025, 05:30:55] 📦 Anbar qalığı təsdiqsiz edildi
+   Tip: Anbar (ID: 3)
+   003451 kodlu "Zan" məhsulundan -3 ədəd var idi, 1 ədədi AL00000001 alış qaiməsində təsdiqsiz edildi, qaldı 0 ədəd
+   Qaimə nömrəsi: AL00000001
+   Məhsul: Zan (003451)
+   Qalıq: -3 → 0 (-1)
+
+[22.11.2025, 05:30:56] 📦 Anbar qalığı təsdiqsiz edildi
+   Tip: Anbar (ID: 8)
+   629652 kodlu "dancing" məhsulundan 1 ədəd var idi, 1 ədədi AL00000001 alış qaiməsində təsdiqsiz edildi, qaldı 0 ədəd
+   Qaimə nömrəsi: AL00000001
+   Məhsul: dancing (629652)
+   Qalıq: 1 → 0 (-1)
+
+[22.11.2025, 05:30:56] supplier_balance_changed
+   Tip: supplier (ID: 2)
+   merhemet təchizatçısının borcu AL00000001 qaiməsi səbəbindən dəyişdi. Köhnə borc: 0.00 AZN, Yeni borc: 0.00 AZN (-53.00 AZN) - alış qaiməsi təsdiqsiz edildi
+   Qaimə nömrəsi: AL00000001
+
+[22.11.2025, 05:31:09] 📦 Anbar qalığı təsdiqsiz edildi
+   Tip: Anbar (ID: 3)
+   003451 kodlu "Zan" məhsulundan 0 ədəd var idi, 5 ədədi SI-0000000001 satış qaiməsində təsdiqsiz edildi, qaldı 5 ədəd
+   Qaimə nömrəsi: SI-0000000001
+   Məhsul: Zan (003451)
+   Qalıq: 0 → 5 (+5)
+
+[22.11.2025, 05:31:10] customer_balance_changed
+   Tip: customer (ID: 2)
+   Rehime müştərisinin borcu SI-0000000001 qaiməsi səbəbindən dəyişdi. Köhnə borc: 175.00 AZN, Yeni borc: 0.00 AZN (-175.00 AZN) - satış qaiməsi təsdiqsiz edildi
+   Qaimə nömrəsi: SI-0000000001
+
+[22.11.2025, 05:31:22] payment_deleted
+   Tip: payment (ID: 2)
+   merhemet təchizatçısına edilən 200 AZN ödəniş geri qaytarıldı. Köhnə balans: 0 AZN, Yeni balans: 200 AZN
+
+[22.11.2025, 05:39:03] 📦 Anbar qalığı təsdiqləndi
+   Tip: Anbar (ID: 3)
+   003451 kodlu "Zan" məhsulundan 0 ədəd var idi, 5 ədədi SI-0000000001 satış qaiməsində təsdiqləndi və satıldı, qaldı -5 ədəd
+   Qaimə nömrəsi: SI-0000000001
+   Məhsul: Zan (003451)
+   Qalıq: 0 → -5 (-5)
+
+[22.11.2025, 05:39:04] customer_balance_changed
+   Tip: customer (ID: 2)
+   Rehime müştərisinin borcu SI-0000000001 qaiməsi səbəbindən dəyişdi. Köhnə borc: 0.00 AZN, Yeni borc: 175.00 AZN (+175.00 AZN) - satış qaiməsi təsdiqləndi
+   Qaimə nömrəsi: SI-0000000001
+
+[22.11.2025, 05:40:29] 📦 Anbar qalığı təsdiqləndi
+   Tip: Anbar (ID: 3)
+   003451 kodlu "Zan" məhsulundan -5 ədəd var idi, 1 ədədi AL00000002 alış qaiməsində təsdiqləndi, qaldı -4 ədəd
+   Qaimə nömrəsi: AL00000002
+   Məhsul: Zan (003451)
+   Qalıq: -5 → -4 (+1)
+
+[22.11.2025, 05:40:29] 📦 Anbar qalığı təsdiqləndi
+   Tip: Anbar (ID: 8)
+   629652 kodlu "dancing" məhsulundan 0 ədəd var idi, 1 ədədi AL00000002 alış qaiməsində təsdiqləndi, qaldı 1 ədəd
+   Qaimə nömrəsi: AL00000002
+   Məhsul: dancing (629652)
+   Qalıq: 0 → 1 (+1)
+
+[22.11.2025, 05:40:30] supplier_balance_changed
+   Tip: supplier (ID: 2)
+   merhemet təchizatçısının borcu AL00000002 qaiməsi səbəbindən dəyişdi. Köhnə borc: 200.00 AZN, Yeni borc: 253.00 AZN (+53.00 AZN) - alış qaiməsi təsdiqləndi
+   Qaimə nömrəsi: AL00000002
+
+[22.11.2025, 05:41:20] 📦 Anbar qalığı təsdiqsiz edildi
+   Tip: Anbar (ID: 3)
+   003451 kodlu "Zan" məhsulundan -4 ədəd var idi, 5 ədədi SI-0000000001 satış qaiməsində təsdiqsiz edildi, qaldı 1 ədəd
+   Qaimə nömrəsi: SI-0000000001
+   Məhsul: Zan (003451)
+   Qalıq: -4 → 1 (+5)
+
+[22.11.2025, 05:41:21] customer_balance_changed
+   Tip: customer (ID: 2)
+   Rehime müştərisinin borcu SI-0000000001 qaiməsi səbəbindən dəyişdi. Köhnə borc: 175.00 AZN, Yeni borc: 0.00 AZN (-175.00 AZN) - satış qaiməsi təsdiqsiz edildi
+   Qaimə nömrəsi: SI-0000000001
+
+[22.11.2025, 05:42:05] payment_created
+   Tip: payment (ID: 3)
+   merhemet təchizatçısına 200 AZN ödəniş edildi. Köhnə balans: 53 AZN, Yeni balans: -147 AZN (təchizatçı bizə borclu)
+
+[22.11.2025, 05:42:29] 📦 Anbar qalığı təsdiqsiz edildi
+   Tip: Anbar (ID: 3)
+   003451 kodlu "Zan" məhsulundan 1 ədəd var idi, 1 ədədi AL00000002 alış qaiməsində təsdiqsiz edildi, qaldı 0 ədəd
+   Qaimə nömrəsi: AL00000002
+   Məhsul: Zan (003451)
+   Qalıq: 1 → 0 (-1)
+
+[22.11.2025, 05:42:30] 📦 Anbar qalığı təsdiqsiz edildi
+   Tip: Anbar (ID: 8)
+   629652 kodlu "dancing" məhsulundan 1 ədəd var idi, 1 ədədi AL00000002 alış qaiməsində təsdiqsiz edildi, qaldı 0 ədəd
+   Qaimə nömrəsi: AL00000002
+   Məhsul: dancing (629652)
+   Qalıq: 1 → 0 (-1)
+
+[22.11.2025, 05:42:30] supplier_balance_changed
+   Tip: supplier (ID: 2)
+   merhemet təchizatçısının borcu AL00000002 qaiməsi səbəbindən dəyişdi. Köhnə borc: -147.00 AZN, Yeni borc: -200.00 AZN (-53.00 AZN) - alış qaiməsi təsdiqsiz edildi
+   Qaimə nömrəsi: AL00000002
+
+[22.11.2025, 05:43:07] 📦 Anbar qalığı təsdiqləndi
+   Tip: Anbar (ID: 3)
+   003451 kodlu "Zan" məhsulundan 0 ədəd var idi, 5 ədədi SI-0000000001 satış qaiməsində təsdiqləndi və satıldı, qaldı -5 ədəd
+   Qaimə nömrəsi: SI-0000000001
+   Məhsul: Zan (003451)
+   Qalıq: 0 → -5 (-5)
+
+[22.11.2025, 05:43:08] customer_balance_changed
+   Tip: customer (ID: 2)
+   Rehime müştərisinin borcu SI-0000000001 qaiməsi səbəbindən dəyişdi. Köhnə borc: 0.00 AZN, Yeni borc: 175.00 AZN (+175.00 AZN) - satış qaiməsi təsdiqləndi
+   Qaimə nömrəsi: SI-0000000001
+
+[22.11.2025, 05:43:38] payment_created
+   Tip: payment (ID: 4)
+   Rehime müştərisindən 500 AZN ödəniş alındı. Köhnə borc: 175 AZN, Yeni borc: 0 AZN
+
+[22.11.2025, 05:45:52] payment_deleted
+   Tip: payment (ID: 4)
+   Rehime müştərisindən alınan 500 AZN ödəniş geri qaytarıldı. Köhnə balans: 0 AZN, Yeni balans: 500 AZN
+
+[22.11.2025, 05:48:03] payment_created
+   Tip: payment (ID: 5)
+   Rehime müştərisindən 500 AZN ödəniş alındı. Köhnə balans: 175 AZN, Yeni balans: -325 AZN (biz müştəriyə borcluyuq)
+
+[22.11.2025, 05:48:21] 📦 Anbar qalığı təsdiqsiz edildi
+   Tip: Anbar (ID: 3)
+   003451 kodlu "Zan" məhsulundan -5 ədəd var idi, 5 ədədi SI-0000000001 satış qaiməsində təsdiqsiz edildi, qaldı 0 ədəd
+   Qaimə nömrəsi: SI-0000000001
+   Məhsul: Zan (003451)
+   Qalıq: -5 → 0 (+5)
+
+[22.11.2025, 05:48:21] customer_balance_changed
+   Tip: customer (ID: 2)
+   Rehime müştərisinin borcu SI-0000000001 qaiməsi səbəbindən dəyişdi. Köhnə borc: -325.00 AZN, Yeni borc: 0.00 AZN (-175.00 AZN) - satış qaiməsi təsdiqsiz edildi
+   Qaimə nömrəsi: SI-0000000001
+
+[22.11.2025, 05:52:31] 📦 Anbar qalığı təsdiqləndi
+   Tip: Anbar (ID: 3)
+   003451 kodlu "Zan" məhsulundan 0 ədəd var idi, 5 ədədi SI-0000000001 satış qaiməsində təsdiqləndi və satıldı, qaldı -5 ədəd
+   Qaimə nömrəsi: SI-0000000001
+   Məhsul: Zan (003451)
+   Qalıq: 0 → -5 (-5)
+
+[22.11.2025, 05:52:32] customer_balance_changed
+   Tip: customer (ID: 2)
+   Rehime müştərisinin borcu SI-0000000001 qaiməsi səbəbindən dəyişdi. Köhnə borc: -500.00 AZN, Yeni borc: -325.00 AZN (+175.00 AZN) - satış qaiməsi təsdiqləndi
+   Qaimə nömrəsi: SI-0000000001
+
+[22.11.2025, 05:52:52] payment_deleted
+   Tip: payment (ID: 5)
+   Rehime müştərisindən alınan 500 AZN ödəniş geri qaytarıldı. Köhnə balans: -325 AZN, Yeni balans: 175 AZN
+
+[22.11.2025, 18:04:44] İstifadəçi giriş etdi. Email: nkelesov@gmail.com

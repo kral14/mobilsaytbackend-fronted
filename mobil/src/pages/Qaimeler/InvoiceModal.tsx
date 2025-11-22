@@ -14,22 +14,24 @@ interface InvoiceItem {
   product_article?: string
 }
 
+interface InvoiceForm {
+  supplier_id?: number | null
+  supplier_name?: string
+  customer_id?: number | null
+  customer_name?: string
+  invoiceItems: InvoiceItem[]
+  notes: string
+  invoice_number: string
+  invoice_date: string
+  payment_date: string
+}
+
 interface InvoiceModalProps {
   show: boolean
   onClose: () => void
   selectedInvoice: PurchaseInvoice | SaleInvoice | null
-  invoiceForm: {
-    supplier_id?: number | null
-    supplier_name?: string
-    customer_id?: number | null
-    customer_name?: string
-    invoiceItems: InvoiceItem[]
-    notes: string
-    invoice_number: string
-    invoice_date: string
-    payment_date: string
-  }
-  setInvoiceForm: React.Dispatch<React.SetStateAction<any>>
+  invoiceForm: InvoiceForm
+  setInvoiceForm: React.Dispatch<React.SetStateAction<InvoiceForm>>
   suppliers?: Supplier[]
   supplierSearchInput?: string
   setSupplierSearchInput?: React.Dispatch<React.SetStateAction<string>>
