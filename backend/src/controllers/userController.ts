@@ -242,7 +242,8 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
     }
 
     // Özünü silmək olmaz
-    if (user.id === req.userId) {
+    const currentUserId = req.userId ? parseInt(req.userId as string, 10) : null
+    if (currentUserId && user.id === currentUserId) {
       return res.status(400).json({ message: 'Öz hesabınızı silə bilməzsiniz' })
     }
 

@@ -178,7 +178,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 
           // Log yaz
           await logWarehouseChange(
-            req.userId,
+            req.userId ? parseInt(req.userId as string, 10) : null,
             item.product_id,
             warehouse.products?.name || `ID ${item.product_id}`,
             warehouse.products?.code || null,
@@ -208,7 +208,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
             
             // Log yaz
             await logCustomerBalanceChange(
-              req.userId,
+              req.userId ? parseInt(req.userId as string, 10) : null,
               customer_id,
               customer.name,
               currentBalance,
@@ -223,7 +223,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 
       // Qaimə yaradıldığı üçün log yaz
       await logInvoiceCreated(
-        req.userId,
+        req.userId ? parseInt(req.userId as string, 10) : null,
         invoice.id,
         invoiceNumber,
         'sale',
@@ -314,7 +314,7 @@ export const updateOrder = async (req: AuthRequest, res: Response) => {
             
             // Log yaz
             await logCustomerBalanceChange(
-              req.userId,
+              req.userId ? parseInt(req.userId as string, 10) : null,
               invoice.customer_id,
               oldCustomer.name,
               currentBalance,
@@ -423,7 +423,7 @@ export const updateOrder = async (req: AuthRequest, res: Response) => {
             
             // Log yaz
             await logCustomerBalanceChange(
-              req.userId,
+              req.userId ? parseInt(req.userId as string, 10) : null,
               newCustomerId,
               newCustomer.name,
               currentBalance,
@@ -828,7 +828,7 @@ export const deleteOrder = async (req: AuthRequest, res: Response) => {
             
             // Log yaz
             await logCustomerBalanceChange(
-              req.userId,
+              req.userId ? parseInt(req.userId as string, 10) : null,
               invoice.customer_id,
               customer.name,
               currentBalance,

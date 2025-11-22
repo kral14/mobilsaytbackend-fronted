@@ -150,7 +150,7 @@ export const createPurchaseInvoice = async (req: AuthRequest, res: Response) => 
             // Log yaz (transaction-dan sonra)
             logPromises.push(
               logWarehouseChange(
-                req.userId,
+                req.userId ? parseInt(req.userId as string, 10) : null,
                 item.product_id,
                 warehouse.products?.name || `ID ${item.product_id}`,
                 warehouse.products?.code || null,
@@ -174,7 +174,7 @@ export const createPurchaseInvoice = async (req: AuthRequest, res: Response) => 
             // Log yaz (transaction-dan sonra)
             logPromises.push(
               logWarehouseChange(
-                req.userId,
+                req.userId ? parseInt(req.userId as string, 10) : null,
                 item.product_id,
                 newWarehouse.products?.name || `ID ${item.product_id}`,
                 newWarehouse.products?.code || null,
@@ -208,7 +208,7 @@ export const createPurchaseInvoice = async (req: AuthRequest, res: Response) => 
             // Log yaz (transaction-dan sonra)
             logPromises.push(
               logSupplierBalanceChange(
-                req.userId,
+                req.userId ? parseInt(req.userId as string, 10) : null,
                 supplier_id,
                 supplier.name,
                 currentBalance,
@@ -245,21 +245,27 @@ export const createPurchaseInvoice = async (req: AuthRequest, res: Response) => 
     })
 
     // Qaimə yaradıldı log (transaction-dan sonra)
-    logPromises.push(
-      logInvoiceCreated(req.userId, response.invoice.id, response.invoice.invoice_number, 'purchase', response.supplierName)
-    )
+    if (response.invoice) {
+      logPromises.push(
+        logInvoiceCreated(req.userId ? parseInt(req.userId as string, 10) : null, response.invoice.id, response.invoice.invoice_number, 'purchase', response.supplierName)
+      )
+    }
 
     // Log yazmalarını transaction-dan sonra et (async)
     Promise.all(logPromises).catch(err => {
       console.error('❌ [CREATE INVOICE] Log yazılarkən xəta:', err)
     })
 
-    console.log('✅ [CREATE INVOICE] Qaimə yaradıldı:', {
-      id: response.invoice.id,
-      invoice_number: response.invoice.invoice_number,
-      is_active: response.invoice.is_active,
-    })
-    res.status(201).json(response.invoice)
+    if (response.invoice) {
+      console.log('✅ [CREATE INVOICE] Qaimə yaradıldı:', {
+        id: response.invoice.id,
+        invoice_number: response.invoice.invoice_number,
+        is_active: response.invoice.is_active,
+      })
+      res.status(201).json(response.invoice)
+    } else {
+      throw new Error('Qaimə yaradıla bilmədi')
+    }
   } catch (error: any) {
     console.error('❌ [CREATE INVOICE] Xəta:', error)
     console.error('❌ [CREATE INVOICE] Xəta detalları:', {
@@ -841,7 +847,7 @@ export const deletePurchaseInvoice = async (req: AuthRequest, res: Response) => 
       where: { id: parseInt(id) },
     })
     if (invoice) {
-      await logInvoiceDeleted(req.userId, invoice.id, invoice.invoice_number, 'purchase')
+      await logInvoiceDeleted(req.userId ? parseInt(req.userId as string, 10) : null, invoice.id, invoice.invoice_number, 'purchase')
     }
 
     res.json({ message: 'Alış qaiməsi silindi' })
@@ -894,7 +900,7 @@ export const restorePurchaseInvoice = async (req: AuthRequest, res: Response) =>
     })
 
     // Qaimə geri qaytarıldı log
-    await logInvoiceRestored(req.userId, restoredInvoice.id, restoredInvoice.invoice_number, 'purchase')
+    await logInvoiceRestored(req.userId ? parseInt(req.userId as string, 10) : null, restoredInvoice.id, restoredInvoice.invoice_number, 'purchase')
 
     res.json(restoredInvoice)
   } catch (error: any) {
