@@ -15,10 +15,10 @@ interface InvoiceItem {
 }
 
 interface InvoiceForm {
-  supplier_id?: number | null
-  supplier_name?: string
-  customer_id?: number | null
-  customer_name?: string
+  supplier_id: number | null
+  supplier_name: string
+  customer_id: number | null
+  customer_name: string
   invoiceItems: InvoiceItem[]
   notes: string
   invoice_number: string

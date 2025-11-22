@@ -121,6 +121,8 @@ export default function SatisQaimeleri() {
 
   // Invoice form state
   const [invoiceForm, setInvoiceForm] = useState<{
+    supplier_id: number | null
+    supplier_name: string
     customer_id: number | null
     customer_name: string
     invoiceItems: InvoiceItem[]
@@ -129,6 +131,8 @@ export default function SatisQaimeleri() {
     invoice_date: string
     payment_date: string
   }>({
+    supplier_id: null,
+    supplier_name: '',
     customer_id: null,
     customer_name: '',
     invoiceItems: [],

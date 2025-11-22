@@ -123,6 +123,8 @@ export default function AlisQaimeleri() {
   const [invoiceForm, setInvoiceForm] = useState<{
     supplier_id: number | null
     supplier_name: string
+    customer_id: number | null
+    customer_name: string
     invoiceItems: InvoiceItem[]
     notes: string
     invoice_number: string
@@ -131,6 +133,8 @@ export default function AlisQaimeleri() {
   }>({
     supplier_id: null,
     supplier_name: '',
+    customer_id: null,
+    customer_name: '',
     invoiceItems: [],
     notes: '',
     invoice_number: '',
